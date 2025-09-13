@@ -64,9 +64,6 @@ func runCmd(command commandExecution, outputChan chan string) {
 		re := regexp.MustCompile(`^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$`)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-
-			log.Println(scanner.Text())
-
 			output := scanner.Text()
 			isURL := re.MatchString(output)
 			if !isURL {

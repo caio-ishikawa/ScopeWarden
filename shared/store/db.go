@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/caio-ishikawa/target-tracker/shared/models"
@@ -126,29 +125,26 @@ func (db Database) UpdateScope(scope models.Scope) error {
 }
 
 // Returns a 3d list of strings for use in the CLI
-func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([][]string, error) {
-	query := fmt.Sprintf("SELECT url, query_params, status_code, last_updated FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
+	query := fmt.Sprintf("SELECT url, query_params, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get all scopes: %w", err)
+		return nil, fmt.Errorf("Failed to get all domain: %w", err)
 	}
 	defer rows.Close()
 
-	var results [][]string
+	var results []models.Domain
 	for rows.Next() {
 		var item models.Domain
-		if err := rows.Scan(&item.URL, &item.QueryParams, &item.StatusCode, &item.LastUpdated); err != nil {
-			return nil, fmt.Errorf("Failed to scan scope row: %w", err)
+		if err := rows.Scan(&item.URL, &item.QueryParams, &item.StatusCode); err != nil {
+			return nil, fmt.Errorf("Failed to scan domain row: %w", err)
 		}
 
-		// A bit janky but I'll figure it out if it becomes a problem
-		res := []string{item.URL, item.QueryParams, strconv.Itoa(item.StatusCode), item.LastUpdated}
-
-		results = append(results, res)
+		results = append(results, item)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Rows error when getting scopes: %w", err)
+		return nil, fmt.Errorf("Rows error when getting domain: %w", err)
 	}
 
 	return results, nil
@@ -216,7 +212,7 @@ func (db Database) GetDomainByURL(url string) (*models.Domain, error) {
 
 func (db Database) InsertPort(port models.Port) error {
 	if _, err := db.connection.Exec(
-		`INSERT INTO port (uuid, domain_uuid, port, port_state) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO port (uuid, domain_uuid, port, port_state) VALUES (?, ?, ?, ?)`,
 		port.UUID,
 		port.DomainUUID,
 		port.State,
@@ -254,4 +250,47 @@ func (db Database) GetPort(domainUUID string) (*models.Port, error) {
 	}
 
 	return &port, nil
+}
+
+func (db Database) UpdateDaemonStats(stats models.DaemonStats) error {
+	if _, err := db.connection.Exec(
+		`UPDATE daemon_stats SET total_found_urls = ?, total_new_urls = ?, total_found_ports = ?, total_new_ports = ?, scan_time = ?, scan_begin = ?, last_scan_ended =?, is_running = ?`,
+		stats.TotalFoundURLs,
+		stats.TotalNewURLs,
+		stats.TotalFoundPorts,
+		stats.TotalNewPorts,
+		stats.ScanTime.String(),
+		stats.ScanBegin.String(),
+		stats.LastScanEnded.String(),
+		stats.IsRunning,
+	); err != nil {
+		return fmt.Errorf("Failed to update stats: %w", err)
+	}
+
+	return nil
+}
+
+func (db Database) GetStats() (*models.DaemonStats, error) {
+	var stats models.DaemonStats
+	err := db.connection.QueryRow(
+		`SELECT total_found_urls, total_new_urls, total_found_ports, total_new_ports, scan_time, scan_begin, last_scan_ended, is_running FROM daemon_stats`).
+		Scan(
+			&stats.TotalFoundURLs,
+			&stats.TotalNewURLs,
+			&stats.TotalFoundPorts,
+			&stats.TotalNewPorts,
+			&stats.ScanTime,
+			&stats.ScanBegin,
+			&stats.LastScanEnded,
+			&stats.IsRunning,
+		)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("Failed to get stats: %w", err)
+	}
+
+	return &stats, nil
 }

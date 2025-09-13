@@ -14,30 +14,19 @@ import (
 
 type DaemonConfig struct {
 	// Represents the amount of time to wait before running the next scan in hours
-	ScanTime int
+	ScanTimeout int
 }
 
-type DaemonStats struct {
-	// Represents the total number of found URLs in this current scan
-	TotalFoundURLs int
-	// Represents all new URLs (includes URLs that already existed but were down previously)
-	TotalNewURLs int
-	// Represents the total number of port found in this current scan
-	TotalFoundPorts int
-	// Represents all new port founds in this current scan (includes ports that were closed/filtered and are now open)
-	TotalNewPorts int
-}
-
-func NewDaemonConfig(scanTime int) DaemonConfig {
+func NewDaemonConfig(scanTimeout int) DaemonConfig {
 	return DaemonConfig{
-		ScanTime: scanTime,
+		ScanTimeout: scanTimeout,
 	}
 }
 
 type Daemon struct {
 	db       store.Database
 	telegram modules.TelegramClient
-	stats    DaemonStats
+	stats    models.DaemonStats
 	config   DaemonConfig
 }
 
@@ -56,13 +45,23 @@ func NewDaemon() (Daemon, error) {
 		db:       db,
 		telegram: telegram,
 		config:   NewDaemonConfig(12),
-		stats: DaemonStats{
+		stats: models.DaemonStats{
 			TotalFoundURLs:  0,
 			TotalNewURLs:    0,
 			TotalFoundPorts: 0,
 			TotalNewPorts:   0,
+			ScanBegin:       time.Now(),
+			ScanTime:        time.Now().Sub(time.Now()),
+			LastScanEnded:   time.Now(),
 		},
 	}, nil
+}
+
+func (a Daemon) Stats() models.DaemonStats {
+	// Compute uptime
+	a.stats.ScanTime = time.Now().Sub(a.stats.ScanBegin)
+
+	return a.stats
 }
 
 func (a Daemon) Notify(notifyChan chan models.Notification) {
@@ -90,6 +89,12 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 	parsed, err := url.Parse(input)
 	if err != nil {
 		return fmt.Errorf("[%s] Failed to parse URL %s - SKIPPING", tool, input)
+	}
+
+	// Increment found URLs
+	a.stats.TotalFoundURLs += 1
+	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+		log.Printf("%s", err.Error())
 	}
 
 	res, err := httpClient.Get(input)
@@ -123,6 +128,11 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 	}
 
 	if domain == nil {
+		a.stats.TotalNewURLs += 1
+		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+			log.Printf("%s", err.Error())
+		}
+
 		toInsert := models.Domain{
 			UUID:        uuid.NewString(),
 			TargetUUID:  target.UUID,
@@ -148,6 +158,11 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 
 	// Update and notify if staus code has changed since last run
 	if domain.StatusCode != res.StatusCode || domain.StatusCode == 0 {
+		a.stats.TotalNewURLs += 1
+		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+			log.Printf("%s", err.Error())
+		}
+
 		toInsert := models.Domain{
 			UUID:        domain.UUID,
 			TargetUUID:  target.UUID,
