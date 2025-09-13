@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/caio-ishikawa/target-tracker/models"
 	"github.com/caio-ishikawa/target-tracker/modules"
@@ -9,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -52,20 +55,25 @@ func main() {
 
 	// TODO: Get all scopes to run the modules with
 
-	// TODO:
 	// Start notification process
-	//notificationChannel := make(chan models.Notification, 1000)
-	//go app.Notify(notificationChannel)
+	notificationChannel := make(chan models.Notification, 1000)
+	go app.Notify(notificationChannel)
 
-	// Start real-time consumer process
+	// Run GAU and consume output in real-time
 	gauChan := make(chan string, 1000)
-	// TODO: this probably needs some kind of wait group to avoid running a both waymore and gau at the same time
-	// and getting blocked by some of the sources (and nmap should only run after both)
 	go app.ConsumeRealTime(gauChan, target, scope.FirstRun, models.Gau)
-
-	// Run GAU
 	modules.RunGau(scope, gauChan)
-	// TODO: Run Waymore
+
+	// Run Waymore and consume output from output file
+	// log.Printf("[%s] Running %s", models.Waymore, models.Waymore)
+	// outputFile, err := modules.RunWaymore(scope)
+	// if err != nil {
+	// 	log.Printf("[%s] Failed to run Waymore: %s", models.Waymore, err.Error())
+	// }
+	// if err := app.ConsumeFromOutputFile(target, scope.FirstRun, outputFile, models.Waymore); err != nil {
+	// 	log.Printf("woops")
+	// }
+
 	// TODO: Run nmap
 }
 
@@ -84,70 +92,94 @@ func (a App) ConsumeRealTime(inputChan chan string, target models.Target, firstR
 	}
 
 	for input := range inputChan {
-		parsed, err := url.Parse(input)
-		if err != nil {
-			log.Printf("[%s] Failed to parse URL %s - SKIPPING", tool, input)
-			continue
+		if err := a.ParseURLOutput(httpClient, input, firstRun, tool, target); err != nil {
+			log.Println(err.Error())
+		}
+	}
+}
+
+func (a App) ConsumeFromOutputFile(target models.Target, firstRun bool, filePath string, tool models.Module) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("[%s] Failed to read from file path %s: %w", tool, filePath, err)
+	}
+
+	httpClient := http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		if err := a.ParseURLOutput(httpClient, scanner.Text(), firstRun, tool, target); err != nil {
+			log.Println(err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (a App) ParseURLOutput(httpClient http.Client, input string, firstRun bool, tool models.Module, target models.Target) error {
+	parsed, err := url.Parse(input)
+	if err != nil {
+		return fmt.Errorf("[%s] Failed to parse URL %s - SKIPPING", tool, input)
+	}
+
+	res, err := httpClient.Get(input)
+	if err != nil {
+		log.Printf("[%s] Failed to make request to URL %s: %s", tool, input, err.Error())
+	}
+
+	var statusCode int
+	if res == nil {
+		statusCode = 0
+	} else {
+		statusCode = res.StatusCode
+	}
+
+	var baseURL string
+	if parsed.Scheme == "https" || parsed.Scheme == "http" {
+		baseURL = fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, parsed.Path)
+	} else if parsed.Scheme == "" {
+		baseURL = parsed.Path
+	}
+
+	domain, err := a.db.GetDomainByURL(baseURL)
+	if err != nil {
+		return fmt.Errorf("[%s] %w - SKIPPING", tool, err)
+	}
+
+	notification := models.Notification{
+		TargetName: target.Name,
+		Type:       models.URLUpdate,
+		Content:    baseURL,
+	}
+
+	if domain == nil {
+		toInsert := models.Domain{
+			UUID:        uuid.NewString(),
+			TargetUUID:  target.UUID,
+			URL:         baseURL,
+			IPAddress:   "", // TODO: This needs to be updated when running the port scanner
+			QueryParams: parsed.RawQuery,
+			StatusCode:  statusCode,
+		}
+		if err := a.db.InsertDomainRecord(toInsert); err != nil {
+			return fmt.Errorf("[%s] %q - SKIPPING", tool, err)
 		}
 
-		res, err := httpClient.Get(input)
-		if err != nil {
-			log.Printf("[%s] Failed to make request to URL %s: %s", tool, input, err.Error())
-		}
-
-		var statusCode int
-		if res == nil {
-			statusCode = 0
-		} else {
-			statusCode = res.StatusCode
-		}
-
-		var baseURL string
-		if parsed.Scheme == "https" || parsed.Scheme == "http" {
-			baseURL = fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, parsed.Path)
-		} else if parsed.Scheme == "" {
-			baseURL = parsed.Path
-		}
-
-		domain, err := a.db.GetDomainByURL(baseURL)
-		if err != nil {
-			log.Printf("[%s] %s - SKIPPING", tool, err.Error())
-			continue
-		}
-
-		// TODO:
-		// notification := models.Notification{
-		// 	TargetName: target.Name,
-		// 	Type:       models.URLUpdate,
-		// 	Content:    baseURL,
-		// }
-
-		if domain == nil {
-			toInsert := models.Domain{
-				UUID:        uuid.NewString(),
-				TargetUUID:  target.UUID,
-				URL:         baseURL,
-				IPAddress:   "", // TODO: This needs to be updated when running the port scanner
-				QueryParams: parsed.RawQuery,
-				StatusCode:  statusCode,
+		// Notify only if this is not the first run on the scope
+		if !firstRun {
+			log.Println("SHOULD NOTIFY")
+			if err = a.telegram.SendMessage(notification); err != nil {
+				log.Printf("[%s] %s", tool, err.Error())
 			}
-			if err := a.db.InsertDomainRecord(toInsert); err != nil {
-				log.Printf("[%s] %s - SKIPPING", tool, err)
-				continue
-			}
-
-			// Notify only if this is not the first run on the scope
-			if !firstRun {
-				log.Println("SHOULD NOTIFY")
-				// TODO:
-				// if err = a.telegram.SendMessage(notification); err != nil {
-				// 	log.Printf("[%s] %s", tool, err.Error())
-				// }
-			}
-
-			continue
 		}
 
+		return nil
+	}
+
+	// Update and notify if staus code has changed since last run
+	if domain.StatusCode != res.StatusCode || domain.StatusCode == 0 {
 		toInsert := models.Domain{
 			UUID:        domain.UUID,
 			TargetUUID:  target.UUID,
@@ -158,20 +190,14 @@ func (a App) ConsumeRealTime(inputChan chan string, target models.Target, firstR
 			LastUpdated: time.Now().String(),
 		}
 		if err := a.db.UpdateDomainRecord(toInsert); err != nil {
-			log.Printf("[%s] %s - SKIPPING", tool, err.Error())
-			continue
+			return fmt.Errorf("[%s] %w - SKIPPING", tool, err)
 		}
 
-		// Notify if old domain became active
-		if domain.StatusCode != res.StatusCode || domain.StatusCode == 0 {
-			log.Println("SHOULD NOTIFY")
-			// TODO:
-			// if err = a.telegram.SendMessage(notification); err != nil {
-			// 	log.Printf("[%s] %s", tool, err.Error())
-			// }
+		log.Println("SHOULD NOTIFY")
+		if err = a.telegram.SendMessage(notification); err != nil {
+			return fmt.Errorf("[%s] %w", tool, err)
 		}
 	}
-}
 
-func (a App) ConsumeFromOutputFile(fileName string) {
+	return nil
 }
