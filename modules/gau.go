@@ -7,11 +7,42 @@ import (
 	"log"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 )
 
-func RunGau(scope models.Scope, outputChan chan string) {
-	cmd := exec.Command("gau", scope.URL)
+type commandExecution struct {
+	command string
+	args    []string
+}
+
+func RunModule(module models.Module, scope models.Scope, outputChan chan string) error {
+	var command string
+	var args []string
+
+	switch module {
+	case models.Gau:
+		command = "gau"
+		args = []string{scope.URL}
+	case models.Waymore:
+		command = "waymore"
+		args = []string{"-i", scope.URL}
+	default:
+		return fmt.Errorf("Unknown module: %s", module)
+	}
+
+	commandExecution := commandExecution{
+		command: command,
+		args:    args,
+	}
+
+	runCmd(commandExecution, outputChan)
+
+	return nil
+}
+
+func runCmd(command commandExecution, outputChan chan string) {
+	cmd := exec.Command(command.command, command.args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -34,6 +65,9 @@ func RunGau(scope models.Scope, outputChan chan string) {
 		re := regexp.MustCompile(`^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$`)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
+
+			log.Println(scanner.Text())
+
 			output := scanner.Text()
 			isURL := re.MatchString(output)
 			if !isURL {

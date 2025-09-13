@@ -89,6 +89,18 @@ func (db Database) GetScope(targetUUID string) (*models.Scope, error) {
 	return &scope, nil
 }
 
+func (db Database) UpdateScope(scope models.Scope) error {
+	if _, err := db.connection.Exec(
+		`UPDATE scope SET url = ?, first_run = ? WHERE uuid = ?`,
+		scope.URL,
+		scope.FirstRun,
+	); err != nil {
+		return fmt.Errorf("Failed to update scope: %w", err)
+	}
+
+	return nil
+}
+
 func (db Database) InsertDomainRecord(domain models.Domain) error {
 	if _, err := db.connection.Exec(
 		`INSERT INTO domain (uuid, target_uuid, url, status_code) VALUES (?, ?, ?, ?)`,

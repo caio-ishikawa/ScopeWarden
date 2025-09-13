@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"github.com/caio-ishikawa/target-tracker/models"
 	"github.com/caio-ishikawa/target-tracker/modules"
@@ -11,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 )
 
@@ -59,22 +56,21 @@ func main() {
 	notificationChannel := make(chan models.Notification, 1000)
 	go app.Notify(notificationChannel)
 
-	// Run GAU and consume output in real-time
+	// Run GAU & Waymore and consume output in real-time
 	gauChan := make(chan string, 1000)
+	waymoreChan := make(chan string, 1000)
 	go app.ConsumeRealTime(gauChan, target, scope.FirstRun, models.Gau)
-	modules.RunGau(scope, gauChan)
-
-	// Run Waymore and consume output from output file
-	// log.Printf("[%s] Running %s", models.Waymore, models.Waymore)
-	// outputFile, err := modules.RunWaymore(scope)
-	// if err != nil {
-	// 	log.Printf("[%s] Failed to run Waymore: %s", models.Waymore, err.Error())
-	// }
-	// if err := app.ConsumeFromOutputFile(target, scope.FirstRun, outputFile, models.Waymore); err != nil {
-	// 	log.Printf("woops")
-	// }
+	modules.RunModule(models.Gau, scope, gauChan)
+	modules.RunModule(models.Waymore, scope, waymoreChan)
 
 	// TODO: Run nmap
+
+	// Set scope's first_run to false after intial scan
+	if scope.FirstRun == true {
+		newScope := scope
+		newScope.FirstRun = false
+		app.db.UpdateScope(newScope)
+	}
 }
 
 func (a App) Notify(notifyChan chan models.Notification) {
@@ -96,26 +92,6 @@ func (a App) ConsumeRealTime(inputChan chan string, target models.Target, firstR
 			log.Println(err.Error())
 		}
 	}
-}
-
-func (a App) ConsumeFromOutputFile(target models.Target, firstRun bool, filePath string, tool models.Module) error {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("[%s] Failed to read from file path %s: %w", tool, filePath, err)
-	}
-
-	httpClient := http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	for scanner.Scan() {
-		if err := a.ParseURLOutput(httpClient, scanner.Text(), firstRun, tool, target); err != nil {
-			log.Println(err.Error())
-		}
-	}
-
-	return nil
 }
 
 func (a App) ParseURLOutput(httpClient http.Client, input string, firstRun bool, tool models.Module, target models.Target) error {
