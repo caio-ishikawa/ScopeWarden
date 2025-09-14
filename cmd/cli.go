@@ -14,6 +14,10 @@ const (
 	green = "#A7C080"
 	black = "#1E2326"
 	red   = "#E67E80"
+
+	tableLimit            = 50
+	tableHeightHalfScreen = 40
+	tableHeightFullScreen = 80
 )
 
 var baseStyle = lipgloss.NewStyle().
@@ -21,60 +25,65 @@ var baseStyle = lipgloss.NewStyle().
 	BorderForeground(lipgloss.Color(green))
 
 type CLI struct {
-	db store.Database
+	table      table.Model
+	db         store.Database
+	offset     int
+	targetUUID string
 }
 
-type model struct {
-	table table.Model
-}
+func (c CLI) Init() tea.Cmd { return nil }
 
-func (m model) Init() tea.Cmd { return nil }
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (c CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
+			if c.table.Focused() {
+				c.table.Blur()
 			} else {
-				m.table.Focus()
+				c.table.Focus()
+			}
+		case "l":
+			c.offset = c.offset + tableLimit
+			rows, err := c.GetDomainRows()
+			if err != nil {
+				tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+				return c, tea.Quit
+			}
+			c.table.SetRows(rows)
+		case "h":
+			if (c.offset - tableLimit) <= tableLimit {
+				c.offset = c.offset - tableLimit
+				c.RenderURLsTable()
 			}
 		case "q", "ctrl+c":
-			return m, tea.Quit
+			return c, tea.Quit
 		case "enter":
 			// TODO: open link
-			return m, tea.Batch(
-				tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]),
+			return c, tea.Batch(
+				tea.Printf("Let's go to %s!", c.table.SelectedRow()[1]),
 			)
 		}
 	}
-	m.table, cmd = m.table.Update(msg)
+	c.table, cmd = c.table.Update(msg)
 
-	return m, cmd
+	return c, cmd
 }
 
-func (m model) View() string {
+func (m CLI) View() string {
 	return baseStyle.Render(m.table.View()) + "\n"
 }
 
-func NewCLI() (CLI, error) {
+func NewCLI(targetName string) (CLI, error) {
 	db, err := store.Init()
 	if err != nil {
 		return CLI{}, fmt.Errorf("Failed to start DB client: %w", err)
 	}
 
-	return CLI{
-		db: db,
-	}, nil
-}
-
-func (c CLI) RenderURLsTable(targetUUID string) error {
-	offset := 0
-	domains, err := c.db.GetDomainsPerTarget(50, offset, targetUUID)
+	target, err := db.GetTargetByName(targetName)
 	if err != nil {
-		return fmt.Errorf("Failed to get domains by target: %w", err)
+		return CLI{}, fmt.Errorf("Failed to get domain by name: %w", err)
 	}
 
 	columns := []table.Column{
@@ -83,16 +92,10 @@ func (c CLI) RenderURLsTable(targetUUID string) error {
 		{Title: "QUERY PARAMS", Width: 30},
 	}
 
-	var rows []table.Row
-	for _, domain := range domains {
-		rows = append(rows, table.Row{strconv.Itoa(domain.StatusCode), domain.URL, domain.QueryParams})
-	}
-
 	t := table.New(
 		table.WithColumns(columns),
-		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(40),
+		table.WithHeight(tableHeightHalfScreen),
 	)
 
 	s := table.DefaultStyles()
@@ -108,8 +111,37 @@ func (c CLI) RenderURLsTable(targetUUID string) error {
 
 	t.SetStyles(s)
 
-	m := model{t}
-	if _, err := tea.NewProgram(m).Run(); err != nil {
+	return CLI{
+		table:      t,
+		db:         db,
+		targetUUID: target.UUID,
+		offset:     0,
+	}, nil
+}
+
+func (c CLI) GetDomainRows() ([]table.Row, error) {
+	domains, err := c.db.GetDomainsPerTarget(tableLimit, c.offset, c.targetUUID)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get domains by target: %w", err)
+	}
+
+	var rows []table.Row
+	for _, domain := range domains {
+		rows = append(rows, table.Row{strconv.Itoa(domain.StatusCode), domain.URL, domain.QueryParams})
+	}
+
+	return rows, nil
+}
+
+func (c CLI) RenderURLsTable() error {
+	rows, err := c.GetDomainRows()
+	if err != nil {
+		return fmt.Errorf("Error getting domain rows: %w", err)
+	}
+
+	c.table.SetRows(rows)
+
+	if _, err := tea.NewProgram(c).Run(); err != nil {
 		return fmt.Errorf("Error rendering domain table: %w", err)
 	}
 

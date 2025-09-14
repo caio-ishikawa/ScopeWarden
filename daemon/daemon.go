@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/caio-ishikawa/target-tracker/daemon/api"
 	"github.com/caio-ishikawa/target-tracker/daemon/modules"
 	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"github.com/caio-ishikawa/target-tracker/shared/store"
@@ -25,6 +26,7 @@ func NewDaemonConfig(scanTimeout int) DaemonConfig {
 
 type Daemon struct {
 	db       store.Database
+	api      api.API
 	telegram modules.TelegramClient
 	stats    models.DaemonStats
 	config   DaemonConfig
@@ -41,8 +43,14 @@ func NewDaemon() (Daemon, error) {
 		return Daemon{}, fmt.Errorf("Failed to start Telegram client: %w", err)
 	}
 
+	api, err := api.NewAPI()
+	if err != nil {
+		return Daemon{}, fmt.Errorf("Failed to create API: %w", err)
+	}
+
 	return Daemon{
 		db:       db,
+		api:      api,
 		telegram: telegram,
 		config:   NewDaemonConfig(12),
 		stats: models.DaemonStats{
@@ -58,9 +66,7 @@ func NewDaemon() (Daemon, error) {
 }
 
 func (a Daemon) Stats() models.DaemonStats {
-	// Compute uptime
 	a.stats.ScanTime = time.Now().Sub(a.stats.ScanBegin)
-
 	return a.stats
 }
 
@@ -97,9 +103,11 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 		log.Printf("%s", err.Error())
 	}
 
+	// Only process successful requests to avoid noise in DB
 	res, err := httpClient.Get(input)
 	if err != nil {
-		log.Printf("[%s] Failed to make request to URL %s: %s", tool, input, err.Error())
+		log.Printf("[%s] Failed to make request to URL %s: %s - SKIPPING", tool, input, err.Error())
+		return nil
 	}
 
 	var statusCode int
@@ -147,7 +155,6 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 
 		// Notify only if this is not the first run on the scope
 		if !firstRun {
-			log.Println("SHOULD NOTIFY")
 			if err = a.telegram.SendMessage(notification); err != nil {
 				log.Printf("[%s] %s", tool, err.Error())
 			}
@@ -176,11 +183,83 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 			return fmt.Errorf("[%s] %w - SKIPPING", tool, err)
 		}
 
-		log.Println("SHOULD NOTIFY")
 		if err = a.telegram.SendMessage(notification); err != nil {
 			return fmt.Errorf("[%s] %w", tool, err)
 		}
 	}
 
 	return nil
+}
+
+func (a Daemon) RunDaemon() {
+	for {
+		// Avoid running scan before timeout
+		// if time.Since(app.stats.LastScanEnded) < time.Duration(app.config.ScanTimeout)*time.Hour {
+		// 	continue
+		// }
+
+		if a.stats.IsRunning {
+			log.Println("Previous scan ran for longer than scan timeout - CONSIDER ADJUSTING TIMEOUT")
+			continue
+		}
+
+		// Set stats for current scan
+		log.Println("Starting scan")
+		a.stats.ScanBegin = time.Now()
+		a.stats.IsRunning = true
+		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+			log.Printf("%s", err.Error())
+		}
+
+		// Start of actual daemon
+		scopes, err := a.db.GetAllScopes()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, scope := range scopes {
+			targetPtr, err := a.db.GetTarget(scope.TargetUUID)
+			if err != nil {
+				log.Printf("Failed to get target with UUID %s", scope.TargetUUID)
+				continue
+			}
+
+			if targetPtr == nil {
+				log.Printf("Could not find target with UUID %s", scope.TargetUUID)
+				continue
+			}
+
+			// Dereference target
+			target := *targetPtr
+
+			// Start notification process
+			notificationChannel := make(chan models.Notification, 1000)
+			go a.Notify(notificationChannel)
+
+			// Run GAU & Waymore and consume output in real-time
+			gauChan := make(chan string, 1000)
+			waymoreChan := make(chan string, 1000)
+			go a.ConsumeRealTime(gauChan, target, scope.FirstRun, models.Gau)
+			modules.RunModule(models.Gau, scope, gauChan)
+			modules.RunModule(models.Waymore, scope, waymoreChan)
+
+			// TODO: Run nmap
+
+			// Set scope's first_run to false after intial scan
+			if scope.FirstRun == true {
+				newScope := scope
+				newScope.FirstRun = false
+				a.db.UpdateScope(newScope)
+			}
+		}
+
+		// Reset stats when scan ends
+		log.Printf("Scan ended - duration: %s", a.stats.ScanTime.String())
+		a.stats.LastScanEnded = time.Now()
+		a.stats.ScanTime = time.Now().Sub(time.Now())
+		a.stats.IsRunning = false
+		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+			log.Printf("%s", err.Error())
+		}
+	}
 }

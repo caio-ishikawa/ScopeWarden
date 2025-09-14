@@ -6,17 +6,12 @@ import (
 
 // TODO: Flags
 func main() {
-	cli, err := NewCLI()
+	cli, err := NewCLI("NASA")
 	if err != nil {
 		log.Fatal("Failed to start CLI: %w", err)
 	}
 
-	target, err := cli.db.GetTargetByName("NASA")
-	if err != nil {
-		log.Fatal("Failed to get domain by name: %w", err)
-	}
-
-	if err := cli.RenderURLsTable(target.UUID); err != nil {
+	if err := cli.RenderURLsTable(); err != nil {
 		log.Fatalf("Failed to render table: %s", err.Error())
 	}
 }
