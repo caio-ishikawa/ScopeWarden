@@ -29,6 +29,7 @@ func NewAPI() (API, error) {
 func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
 	query := r.URL.Query()
@@ -66,12 +67,40 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
+}
 
+func (a API) getTargetByName(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+
+	targetName := query.Get("name")
+	if targetName == "" {
+		http.Error(w, "No target name", http.StatusBadRequest)
+		return
+	}
+
+	target, err := a.db.GetTargetByName(targetName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get target with name %s", targetName), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(target); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
 	query := r.URL.Query()
@@ -79,11 +108,13 @@ func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 	targetUUID := query.Get("target_name")
 	if targetUUID == "" {
 		http.Error(w, "No target name", http.StatusBadRequest)
+		return
 	}
 
 	scopes, err := a.db.GetAllScopes()
 	if err != nil {
 		http.Error(w, "Failed to get all scopes", http.StatusInternalServerError)
+		return
 	}
 
 	resStruct := models.ScopeListResponse{
@@ -94,23 +125,26 @@ func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
 	}
 }
 
 func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
 	var req models.InsertScopeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
 	}
-	defer r.Body.Close()
 
 	target, err := a.db.GetTargetByName(req.TargetName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Could not get target by name %s", req.TargetName), http.StatusBadRequest)
+		return
 	}
 
 	scopeUUID := uuid.NewString()
@@ -129,10 +163,62 @@ func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (a API) insertTarget(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req models.InsertTargetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println(err.Error())
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	targetUUID := uuid.NewString()
+
+	target := models.Target{
+		UUID: targetUUID,
+		Name: req.Name,
+	}
+
+	if err := a.db.InsertTarget(target); err != nil {
+		log.Println(err.Error())
+		http.Error(w, "Failed to insert target", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (a API) getStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats, err := a.db.GetStats()
+	if err != nil {
+		http.Error(w, "Failed to get all scopes", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func (a API) StartAPI() error {
 	http.HandleFunc("/domains", a.getDomains)
 	http.HandleFunc("/scopes", a.getScopes)
 	http.HandleFunc("/insert_scope", a.insertScope)
+	http.HandleFunc("/insert_target", a.insertTarget)
+	http.HandleFunc("/target", a.getTargetByName)
+	http.HandleFunc("/stats", a.getStats)
 
 	log.Println("API listening on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

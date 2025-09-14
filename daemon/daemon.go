@@ -203,18 +203,24 @@ func (a Daemon) RunDaemon() {
 			continue
 		}
 
+		// Start of actual daemon
+		scopes, err := a.db.GetAllScopes()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if len(scopes) == 0 {
+			log.Println("No scopes found - continuing")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
 		// Set stats for current scan
 		log.Println("Starting scan")
 		a.stats.ScanBegin = time.Now()
 		a.stats.IsRunning = true
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 			log.Printf("%s", err.Error())
-		}
-
-		// Start of actual daemon
-		scopes, err := a.db.GetAllScopes()
-		if err != nil {
-			log.Fatal(err)
 		}
 
 		for _, scope := range scopes {

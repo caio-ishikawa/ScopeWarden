@@ -12,3 +12,7 @@ type InsertScopeRequest struct {
 	TargetName string `json:"target_name"`
 	URL        string
 }
+
+type InsertTargetRequest struct {
+	Name string `json:"name"`
+}

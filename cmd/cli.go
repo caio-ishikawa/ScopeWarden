@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/shared/store"
+	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"net/http"
 	"strconv"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -18,6 +21,8 @@ const (
 	tableLimit            = 50
 	tableHeightHalfScreen = 40
 	tableHeightFullScreen = 80
+
+	apiURL = "http://localhost:8080"
 )
 
 var baseStyle = lipgloss.NewStyle().
@@ -26,7 +31,6 @@ var baseStyle = lipgloss.NewStyle().
 
 type CLI struct {
 	table      table.Model
-	db         store.Database
 	offset     int
 	targetUUID string
 }
@@ -76,14 +80,9 @@ func (m CLI) View() string {
 }
 
 func NewCLI(targetName string) (CLI, error) {
-	db, err := store.Init()
+	target, err := GetTargetByName(targetName)
 	if err != nil {
-		return CLI{}, fmt.Errorf("Failed to start DB client: %w", err)
-	}
-
-	target, err := db.GetTargetByName(targetName)
-	if err != nil {
-		return CLI{}, fmt.Errorf("Failed to get domain by name: %w", err)
+		return CLI{}, fmt.Errorf("Failed to get target by name: %w", err)
 	}
 
 	columns := []table.Column{
@@ -113,14 +112,13 @@ func NewCLI(targetName string) (CLI, error) {
 
 	return CLI{
 		table:      t,
-		db:         db,
 		targetUUID: target.UUID,
 		offset:     0,
 	}, nil
 }
 
 func (c CLI) GetDomainRows() ([]table.Row, error) {
-	domains, err := c.db.GetDomainsPerTarget(tableLimit, c.offset, c.targetUUID)
+	domains, err := GetDomainsByTarget(c.targetUUID, c.offset)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get domains by target: %w", err)
 	}
@@ -143,6 +141,110 @@ func (c CLI) RenderURLsTable() error {
 
 	if _, err := tea.NewProgram(c).Run(); err != nil {
 		return fmt.Errorf("Error rendering domain table: %w", err)
+	}
+
+	return nil
+}
+
+func GetDomainsByTarget(target string, offset int) ([]models.Domain, error) {
+	res, err := http.Get(fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v", apiURL, target, tableLimit, offset))
+	if err != nil {
+		return nil, fmt.Errorf("Could not get domains for target %s: %w", target, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+	}
+
+	var ret models.DomainListResponse
+	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
+		return nil, fmt.Errorf("Failed to decode API response: %w", err)
+	}
+
+	return ret.Domains, nil
+}
+
+func GetTargetByName(target string) (models.Target, error) {
+	res, err := http.Get(fmt.Sprintf("%s/target?name=%s", apiURL, target))
+	if err != nil {
+		return models.Target{}, fmt.Errorf("Could not get domains for target %s: %w", target, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return models.Target{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+	}
+
+	var ret models.Target
+	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
+		return models.Target{}, fmt.Errorf("Failed to decode API response: %w", err)
+	}
+
+	return ret, nil
+}
+
+func GetStats() (models.DaemonStats, error) {
+	res, err := http.Get(fmt.Sprintf("%s/stats", apiURL))
+	if err != nil {
+		return models.DaemonStats{}, fmt.Errorf("Could not get stats: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return models.DaemonStats{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+	}
+
+	var ret models.DaemonStats
+	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
+		return models.DaemonStats{}, fmt.Errorf("Failed to decode API response: %w", err)
+	}
+
+	return ret, nil
+}
+
+func InsertScope(scopes ScopeInsert) error {
+	for _, scopeURL := range scopes.ScopeURLs {
+		reqBody := models.InsertScopeRequest{
+			TargetName: scopes.TargetName,
+			URL:        scopeURL,
+		}
+
+		body, err := json.Marshal(&reqBody)
+		if err != nil {
+			return fmt.Errorf("Failed to marshal scope request body: %w", err)
+		}
+
+		res, err := http.Post(fmt.Sprintf("%s/insert_scope", apiURL), "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			return fmt.Errorf("Could not get stats: %w", err)
+		}
+
+		if res.StatusCode != http.StatusCreated {
+			return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		}
+	}
+
+	return nil
+}
+
+func InsertTarget(target string) error {
+	reqBody := models.InsertTargetRequest{
+		Name: target,
+	}
+
+	body, err := json.Marshal(&reqBody)
+	if err != nil {
+		return fmt.Errorf("Failed to marshal scope request body: %w", err)
+	}
+
+	res, err := http.Post(fmt.Sprintf("%s/insert_target", apiURL), "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("Could not insert target: %w", err)
+	}
+
+	if res.StatusCode != http.StatusCreated {
+		return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
 	}
 
 	return nil
