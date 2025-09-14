@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type API struct {
@@ -36,6 +37,7 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 
 	targetUUID := query.Get("target_uuid")
 	if targetUUID == "" {
+		log.Println("no target uuid")
 		http.Error(w, "No target UUID", http.StatusBadRequest)
 		return
 	}
@@ -46,12 +48,14 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 	limitQuery := query.Get("limit")
 	limit, err := strconv.Atoi(limitQuery)
 	if err != nil {
+		log.Println(err)
 		http.Error(w, fmt.Sprintf("Invalid limit value %s", limitQuery), http.StatusBadRequest)
 		return
 	}
 	offsetQuery := query.Get("offset")
 	offset, err = strconv.Atoi(offsetQuery)
 	if err != nil {
+		log.Println(err)
 		http.Error(w, fmt.Sprintf("Invalid offset value %s", offsetQuery), http.StatusBadRequest)
 		return
 	}
@@ -201,13 +205,26 @@ func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := a.db.GetStats()
 	if err != nil {
+		log.Println(err)
 		http.Error(w, "Failed to get all scopes", http.StatusInternalServerError)
 		return
 	}
 
+	scanTime := time.Since(stats.ScanBegin)
+
+	statsRes := models.StatsResponse{
+		TotalFoundURLs:  stats.TotalFoundURLs,
+		TotalNewURLs:    stats.TotalNewURLs,
+		TotalFoundPorts: stats.TotalFoundPorts,
+		TotalNewPorts:   stats.TotalNewPorts,
+		ScanTime:        scanTime.String(),
+		ScanBegin:       stats.ScanBegin.String(),
+		IsRunning:       stats.IsRunning,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(stats); err != nil {
+	if err := json.NewEncoder(w).Encode(statsRes); err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}

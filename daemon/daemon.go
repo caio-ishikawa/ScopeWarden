@@ -59,14 +59,14 @@ func NewDaemon() (Daemon, error) {
 			TotalFoundPorts: 0,
 			TotalNewPorts:   0,
 			ScanBegin:       time.Now(),
-			ScanTime:        time.Now().Sub(time.Now()),
-			LastScanEnded:   time.Now(),
+			ScanTime:        time.Duration(0),
+			IsRunning:       false,
 		},
 	}, nil
 }
 
 func (a Daemon) Stats() models.DaemonStats {
-	a.stats.ScanTime = time.Now().Sub(a.stats.ScanBegin)
+	a.stats.ScanTime = time.Since(a.stats.ScanBegin)
 	return a.stats
 }
 
@@ -97,17 +97,17 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 		return fmt.Errorf("[%s] Failed to parse URL %s - SKIPPING", tool, input)
 	}
 
-	// Increment found URLs
-	a.stats.TotalFoundURLs += 1
-	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-		log.Printf("%s", err.Error())
-	}
-
 	// Only process successful requests to avoid noise in DB
 	res, err := httpClient.Get(input)
 	if err != nil {
 		log.Printf("[%s] Failed to make request to URL %s: %s - SKIPPING", tool, input, err.Error())
 		return nil
+	}
+
+	// Increment found URLs
+	a.stats.TotalFoundURLs += 1
+	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+		log.Printf("%s", err.Error())
 	}
 
 	var statusCode int
@@ -192,6 +192,9 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 }
 
 func (a Daemon) RunDaemon() {
+	if err := a.db.InsertDaemonStats(a.stats); err != nil {
+		log.Fatalf("Failed to insert initial daemon stats")
+	}
 	for {
 		// Avoid running scan before timeout
 		// if time.Since(app.stats.LastScanEnded) < time.Duration(app.config.ScanTimeout)*time.Hour {
@@ -206,7 +209,9 @@ func (a Daemon) RunDaemon() {
 		// Start of actual daemon
 		scopes, err := a.db.GetAllScopes()
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Failed to get all scopes: %s", err.Error())
+			time.Sleep(10 * time.Second)
+			continue
 		}
 
 		if len(scopes) == 0 {
@@ -261,8 +266,7 @@ func (a Daemon) RunDaemon() {
 
 		// Reset stats when scan ends
 		log.Printf("Scan ended - duration: %s", a.stats.ScanTime.String())
-		a.stats.LastScanEnded = time.Now()
-		a.stats.ScanTime = time.Now().Sub(time.Now())
+		a.stats.ScanTime = time.Duration(0)
 		a.stats.IsRunning = false
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 			log.Printf("%s", err.Error())

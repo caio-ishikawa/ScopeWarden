@@ -34,11 +34,8 @@ CREATE TABLE IF NOT EXISTS daemon_stats (
 	total_new_urls INTEGER DEFAULT 0,
 	total_found_ports INTEGER DEFAULT 0,
 	total_new_ports INTEGER DEFAULT 0,
-	scan_time TEXT,
-	scan_begin TEXT,
-	last_scan_ended TEXT,
+	scan_time TEXT NOT NULL,
+	scan_begin TEXT NOT NULL,
 	is_running BOOLEAN DEFAULT false
 );
-INSERT INTO daemon_stats(total_found_urls, total_new_urls, total_found_ports, total_new_ports, scan_time, last_scan_ended, is_running) VALUES
-	(0, 0, 0, 0, "", "", false);
 `

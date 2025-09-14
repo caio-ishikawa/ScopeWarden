@@ -87,34 +87,39 @@ func ParseFlags() (CLIFlags, error) {
 func main() {
 	flags, err := ParseFlags()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Fatal(err.Error())
 		os.Exit(1)
 	}
 
+	cli, err := NewCLI()
+	if err != nil {
+		log.Fatalf("Error running target-tracekr CLI: %s\n", err.Error())
+	}
+
 	if flags.Stats {
-		// TODO: Show stats
+		if err := cli.RenderStatsTable(); err != nil {
+			log.Fatalf("Failed to render stats table: %s", err.Error())
+		}
+
 		return
 	}
 
 	if flags.InsertTarget != "" {
 		if err := InsertTarget(flags.InsertTarget); err != nil {
-			fmt.Printf("Error inserting target: %s\n", err.Error())
-			os.Exit(1)
+			log.Fatalf("Error inserting target: %s\n", err.Error())
 		}
 	}
 
 	if flags.InsertScope.TargetName != "" {
 		if err := InsertScope(flags.InsertScope); err != nil {
-			fmt.Printf("Error inserting scope: %s\n", err.Error())
-			os.Exit(1)
+			log.Fatalf("Error inserting scope: %s\n", err.Error())
 		}
 	}
 
 	if flags.Target != "" {
-		cli, err := NewCLI(flags.Target)
-		if err != nil {
-			fmt.Printf("Error running target-tracekr CLI: %s\n", err.Error())
-			os.Exit(1)
+		log.Printf("setting target %s", flags.Target)
+		if err := cli.SetTarget(flags.Target); err != nil {
+			log.Fatalf("Failed to set target: %s", err.Error())
 		}
 
 		if err := cli.RenderURLsTable(); err != nil {
