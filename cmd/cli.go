@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"net/http"
+	"os/exec"
 	"strconv"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -18,7 +19,7 @@ const (
 	black = "#1E2326"
 	red   = "#E67E80"
 
-	tableLimit            = 50
+	tableLimit            = 39
 	tableHeightHalfScreen = 40
 	tableHeightFullScreen = 80
 	tableHeightOne        = 2
@@ -59,6 +60,7 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "l":
 			if c.state == TargetDomainTable {
+				// TODO: Check against total size (need total size)
 				c.offset = c.offset + tableLimit
 				rows, err := c.GetDomainRows()
 				if err != nil {
@@ -69,7 +71,7 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "h":
 			if c.state == TargetDomainTable {
-				if (c.offset - tableLimit) >= tableLimit {
+				if c.offset >= tableLimit {
 					c.offset = c.offset - tableLimit
 					tea.Println(c.offset)
 					rows, err := c.GetDomainRows()
@@ -92,10 +94,10 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return c, tea.Quit
 		case "enter":
 			if c.state == TargetDomainTable {
-				// TODO: open link
-				return c, tea.Batch(
-					tea.Printf("Let's go to %s!", c.table.SelectedRow()[1]),
-				)
+				cmd := exec.Command("xdg-open", c.table.SelectedRow()[1])
+				if err := cmd.Run(); err != nil {
+					tea.Printf("Failed to open domain %s", c.table.SelectedRow()[1])
+				}
 			}
 		}
 	}
@@ -150,8 +152,8 @@ func (c *CLI) RenderURLsTable() error {
 
 	columns := []table.Column{
 		{Title: "STATUS", Width: 6},
-		{Title: "URL", Width: 129},
-		{Title: "QUERY PARAMS", Width: 30},
+		{Title: "URL", Width: 139},
+		{Title: "QUERY PARAMS", Width: 20},
 	}
 
 	c.table.SetHeight(tableHeightHalfScreen)

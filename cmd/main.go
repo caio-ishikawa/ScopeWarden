@@ -117,7 +117,6 @@ func main() {
 	}
 
 	if flags.Target != "" {
-		log.Printf("setting target %s", flags.Target)
 		if err := cli.SetTarget(flags.Target); err != nil {
 			log.Fatalf("Failed to set target: %s", err.Error())
 		}
