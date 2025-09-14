@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/caio-ishikawa/target-tracker/shared/models"
 )
@@ -13,14 +14,19 @@ import (
 const baseURL = "https://api.telegram.org"
 
 type TelegramClient struct {
-	chatID string
+	chatID int
 	apiKey string
 }
 
 func NewTelegramClient() (TelegramClient, error) {
-	chatID := os.Getenv("TELEGRAM_CHAT_ID")
-	if chatID == "" {
+	chatIDStr := os.Getenv("TELEGRAM_CHAT_ID")
+	if chatIDStr == "" {
 		return TelegramClient{}, fmt.Errorf("Failed to create telegram client: No client ID")
+	}
+
+	chatID, err := strconv.Atoi(chatIDStr)
+	if err != nil {
+		return TelegramClient{}, fmt.Errorf("Invalid telegram chat ID: %s", chatIDStr)
 	}
 
 	apiKey := os.Getenv("TELEGRAM_API_KEY")

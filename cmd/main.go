@@ -6,12 +6,14 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
 type ScopeInsert struct {
-	TargetName string
-	ScopeURLs  []string
+	TargetName       string
+	ScopeURLs        []string
+	AcceptSubdomains bool
 }
 
 type CLIFlags struct {
@@ -29,7 +31,7 @@ func ParseFlags() (CLIFlags, error) {
 
 	flag.StringVar(&target, "t", "", "Show target stats based on target name (<target_name>")
 	flag.BoolVar(&stats, "s", false, "Show stats")
-	flag.StringVar(&insertScope, "iS", "", "Comma-separated values for scope. First value should be target name and the following values will be interpreted as scope URLs (<target_name>,<scope_url>")
+	flag.StringVar(&insertScope, "iS", "", "Comma-separated values for scope. First value should be target name, the second should be a boolean value representing the accept_subdomain field, and the following values will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>")
 	flag.StringVar(&insertTarget, "iT", "", "Insert target (<target_name>")
 
 	flag.Parse()
@@ -48,8 +50,18 @@ func ParseFlags() (CLIFlags, error) {
 
 		args := strings.Split(insertScope, ",")
 		for i, arg := range args {
+			// Check target name
 			if i == 0 {
 				scope.TargetName = arg
+				continue
+			}
+			// Check accept_subdomain
+			if i == 1 {
+				boolVal, err := strconv.ParseBool(arg)
+				if err != nil {
+					return CLIFlags{}, fmt.Errorf("Invalid accept_subdomain value: %s", arg)
+				}
+				scope.AcceptSubdomains = boolVal
 				continue
 			}
 

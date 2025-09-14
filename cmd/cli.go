@@ -206,8 +206,9 @@ func GetStats() (models.DaemonStats, error) {
 func InsertScope(scopes ScopeInsert) error {
 	for _, scopeURL := range scopes.ScopeURLs {
 		reqBody := models.InsertScopeRequest{
-			TargetName: scopes.TargetName,
-			URL:        scopeURL,
+			TargetName:       scopes.TargetName,
+			URL:              scopeURL,
+			AcceptSubdomains: scopes.AcceptSubdomains,
 		}
 
 		body, err := json.Marshal(&reqBody)

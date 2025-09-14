@@ -150,10 +150,11 @@ func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 	scopeUUID := uuid.NewString()
 
 	scope := models.Scope{
-		UUID:       scopeUUID,
-		TargetUUID: target.UUID,
-		URL:        req.URL,
-		FirstRun:   true,
+		UUID:             scopeUUID,
+		TargetUUID:       target.UUID,
+		URL:              req.URL,
+		AcceptSubdomains: req.AcceptSubdomains,
+		FirstRun:         true,
 	}
 
 	if err = a.db.InsertScope(scope); err != nil {

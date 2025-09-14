@@ -9,8 +9,9 @@ type ScopeListResponse struct {
 }
 
 type InsertScopeRequest struct {
-	TargetName string `json:"target_name"`
-	URL        string
+	TargetName       string `json:"target_name"`
+	URL              string `json:"url"`
+	AcceptSubdomains bool   `json:"accept_subdomains"`
 }
 
 type InsertTargetRequest struct {

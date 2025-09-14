@@ -7,6 +7,7 @@ type UpdateType string
 const (
 	PortUpdate UpdateType = "PORT"
 	URLUpdate  UpdateType = "URL"
+	TestUpdate UpdateType = "TEST"
 )
 
 type Notification struct {
@@ -22,7 +23,7 @@ type GetMeResponse struct {
 }
 
 type NotificationMessage struct {
-	ChatID string `json:"chat_id"`
+	ChatID int    `json:"chat_id"`
 	Text   string `json:"text"`
 }
 

@@ -26,6 +26,9 @@ func RunModule(module models.Module, scope models.Scope, outputChan chan string)
 	case models.Waymore:
 		command = "waymore"
 		args = []string{"-i", scope.URL}
+		if !scope.AcceptSubdomains {
+			args = append(args, "--no-subs")
+		}
 	default:
 		return fmt.Errorf("Unknown module: %s", module)
 	}

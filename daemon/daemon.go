@@ -269,3 +269,14 @@ func (a Daemon) RunDaemon() {
 		}
 	}
 }
+
+func (a Daemon) TestTelegram() {
+	testNotification := models.Notification{
+		TargetName: "TEST",
+		Type:       "TEST",
+		Content:    "TEST",
+	}
+	if err := a.telegram.SendMessage(testNotification); err != nil {
+		log.Printf("[%s] %s", models.Telegram, err.Error())
+	}
+}

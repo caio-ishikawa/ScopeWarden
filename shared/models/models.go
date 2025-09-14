@@ -22,10 +22,11 @@ type Target struct {
 }
 
 type Scope struct {
-	UUID       string `json:"uuid"`
-	TargetUUID string `json:"target_uuid"`
-	URL        string `json:"url"`
-	FirstRun   bool   `json:"first_run"`
+	UUID             string `json:"uuid"`
+	TargetUUID       string `json:"target_uuid"`
+	URL              string `json:"url"`
+	AcceptSubdomains bool   `json:"accept_subdomains"`
+	FirstRun         bool   `json:"first_run"`
 }
 
 type Domain struct {
