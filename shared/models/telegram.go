@@ -28,5 +28,5 @@ type NotificationMessage struct {
 }
 
 func (n Notification) CraftMessage() string {
-	return fmt.Sprintf("🚨NEW %s FOR %s🚨\nA %s that has become available to the public: %s", n.Type, n.TargetName, n.Type, n.Content)
+	return fmt.Sprintf("🚨NEW %s FOR %s🚨\nA %s has become available to the public: %s", n.Type, n.TargetName, n.Type, n.Content)
 }
