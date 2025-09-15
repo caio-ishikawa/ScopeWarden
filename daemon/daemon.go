@@ -60,17 +60,18 @@ func NewDaemon() (Daemon, error) {
 			TotalNewPorts:   0,
 			ScanBegin:       time.Now(),
 			ScanTime:        time.Duration(0),
+			LastScanEnded:   nil,
 			IsRunning:       false,
 		},
 	}, nil
 }
 
-func (a Daemon) Stats() models.DaemonStats {
+func (a *Daemon) Stats() models.DaemonStats {
 	a.stats.ScanTime = time.Since(a.stats.ScanBegin)
 	return a.stats
 }
 
-func (a Daemon) Notify(notifyChan chan models.Notification) {
+func (a *Daemon) Notify(notifyChan chan models.Notification) {
 	for input := range notifyChan {
 		if err := a.telegram.SendMessage(input); err != nil {
 			log.Printf("[TELEGRAM] Failed to send message via Telegram client: %s", err.Error())
@@ -79,7 +80,7 @@ func (a Daemon) Notify(notifyChan chan models.Notification) {
 }
 
 // Consume real-time output of command
-func (a Daemon) ConsumeRealTime(inputChan chan string, target models.Target, firstRun bool, tool models.Module) {
+func (a *Daemon) ConsumeRealTime(inputChan chan string, target models.Target, firstRun bool, tool models.Module) {
 	httpClient := http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -91,7 +92,7 @@ func (a Daemon) ConsumeRealTime(inputChan chan string, target models.Target, fir
 	}
 }
 
-func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bool, tool models.Module, target models.Target) error {
+func (a *Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bool, tool models.Module, target models.Target) error {
 	parsed, err := url.Parse(input)
 	if err != nil {
 		return fmt.Errorf("[%s] Failed to parse URL %s - SKIPPING", tool, input)
@@ -191,15 +192,17 @@ func (a Daemon) parseURLOutput(httpClient http.Client, input string, firstRun bo
 	return nil
 }
 
-func (a Daemon) RunDaemon() {
+func (a *Daemon) RunDaemon() {
 	if err := a.db.InsertDaemonStats(a.stats); err != nil {
 		log.Fatalf("Failed to insert initial daemon stats")
 	}
 	for {
 		// Avoid running scan before timeout
-		// if time.Since(app.stats.LastScanEnded) < time.Duration(app.config.ScanTimeout)*time.Hour {
-		// 	continue
-		// }
+		if a.stats.LastScanEnded != nil {
+			if time.Since(*a.stats.LastScanEnded) < time.Duration(a.config.ScanTimeout)*time.Hour {
+				continue
+			}
+		}
 
 		if a.stats.IsRunning {
 			log.Println("Previous scan ran for longer than scan timeout - CONSIDER ADJUSTING TIMEOUT")
@@ -266,7 +269,9 @@ func (a Daemon) RunDaemon() {
 
 		// Reset stats when scan ends
 		log.Printf("Scan ended - duration: %s", a.stats.ScanTime.String())
+		now := time.Now()
 		a.stats.ScanTime = time.Duration(0)
+		a.stats.LastScanEnded = &now
 		a.stats.IsRunning = false
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 			log.Printf("%s", err.Error())
@@ -274,7 +279,7 @@ func (a Daemon) RunDaemon() {
 	}
 }
 
-func (a Daemon) TestTelegram() {
+func (a *Daemon) TestTelegram() {
 	testNotification := models.Notification{
 		TargetName: "TEST",
 		Type:       "TEST",

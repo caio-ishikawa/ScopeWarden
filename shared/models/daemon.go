@@ -17,6 +17,8 @@ type DaemonStats struct {
 	ScanTime time.Duration `json:"scan_time"`
 	// Represents the time the current scan began
 	ScanBegin time.Time `json:"scan_begin"`
+	// Represents the time the last scan ended
+	LastScanEnded *time.Time `json:"last_scan_ended,omitempty"`
 	// Represents whether or not the scan is running currently
 	IsRunning bool `json:"is_running"`
 }

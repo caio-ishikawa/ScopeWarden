@@ -212,6 +212,13 @@ func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 
 	scanTime := time.Since(stats.ScanBegin)
 
+	var lastScanEnded *string
+	if stats.LastScanEnded != nil {
+		s := *stats.LastScanEnded
+		l := s.String()
+		lastScanEnded = &l
+	}
+
 	statsRes := models.StatsResponse{
 		TotalFoundURLs:  stats.TotalFoundURLs,
 		TotalNewURLs:    stats.TotalNewURLs,
@@ -219,6 +226,7 @@ func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 		TotalNewPorts:   stats.TotalNewPorts,
 		ScanTime:        scanTime.String(),
 		ScanBegin:       stats.ScanBegin.String(),
+		LastScanEnded:   lastScanEnded,
 		IsRunning:       stats.IsRunning,
 	}
 

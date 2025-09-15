@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS daemon_stats (
 	total_new_ports INTEGER DEFAULT 0,
 	scan_time TEXT NOT NULL,
 	scan_begin TEXT NOT NULL,
+	last_scan_ended TEXT,
 	is_running BOOLEAN DEFAULT false
 );
 `

@@ -31,6 +31,8 @@ type StatsResponse struct {
 	ScanTime string `json:"scan_time"`
 	// Represents the time the current scan began
 	ScanBegin string `json:"scan_begin"`
+	// Represents the time the current scan began
+	LastScanEnded *string `json:"last_scan_ended,omitempty"`
 	// Represents whether or not the scan is running currently
 	IsRunning bool `json:"is_running"`
 }

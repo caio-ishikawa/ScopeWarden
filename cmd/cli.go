@@ -201,10 +201,6 @@ func (c *CLI) RenderStatsTable() error {
 	c.table.SetColumns(columns)
 	c.table.SetRows(rows)
 
-	//	if _, err := tea.NewProgram(c).Run(); err != nil {
-	//		return fmt.Errorf("Error rendering stats table: %w", err)
-	//	}
-
 	fmt.Println(c.View())
 	return nil
 }
