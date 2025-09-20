@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"github.com/caio-ishikawa/target-tracker/daemon/models"
 )
 
 const baseURL = "https://api.telegram.org"

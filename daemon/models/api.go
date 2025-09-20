@@ -8,6 +8,10 @@ type ScopeListResponse struct {
 	Scopes []Scope `json:"scope"`
 }
 
+type PortListResponse struct {
+	Ports []Port `json:"port"`
+}
+
 type InsertScopeRequest struct {
 	TargetName       string `json:"target_name"`
 	URL              string `json:"url"`

@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"github.com/caio-ishikawa/target-tracker/daemon/models"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strconv"
 
@@ -31,10 +32,36 @@ var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color(green))
 
+var (
+	// Default URL table columns
+	StatsColumns = []table.Column{
+		{Title: "Total Found URLs", Width: 16},
+		{Title: "Total New URLs", Width: 14},
+		{Title: "Total Found Ports", Width: 17},
+		{Title: "Total New Ports", Width: 15},
+		{Title: "Scan duration", Width: 13},
+		{Title: "Scan time", Width: 20},
+		{Title: "Is Running", Width: 10},
+	}
+
+	URLColumns = []table.Column{
+		{Title: "STATUS", Width: 6},
+		{Title: "URL", Width: 139},
+		{Title: "QUERY PARAMS", Width: 20},
+	}
+
+	PortColumns = []table.Column{
+		{Title: "Port", Width: 10},
+		{Title: "Protocol", Width: 15},
+		{Title: "State", Width: 11},
+	}
+)
+
 type CLIState string
 
 const (
 	TargetDomainTable CLIState = "DomainTable"
+	PortsTable        CLIState = "PortState"
 	StatsTable        CLIState = "StatsTable"
 )
 
@@ -90,6 +117,42 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if c.state == TargetDomainTable {
 				c.table.MoveUp(1)
 			}
+		case "p":
+			if c.state == TargetDomainTable {
+				ports, err := GetPortsByDomain(c.table.SelectedRow()[1])
+				if err != nil {
+					tea.Printf("Failed to get ports by domain: %s", err.Error())
+					return c, tea.Quit
+				}
+
+				rows, err := c.GetPortRowsCols(ports)
+				if err != nil {
+					tea.Printf("Failed to get rows and columns for ports: %s", err.Error())
+					return c, tea.Quit
+				}
+
+				c.state = PortsTable
+
+				// Render port table
+				c.table.SetColumns(PortColumns)
+				c.table.SetRows(rows)
+			}
+		case "b":
+			// Go back to URL table from ports table
+			if c.state == PortsTable {
+				rows, err := c.GetDomainRows()
+				if err != nil {
+					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+					return c, tea.Quit
+				}
+
+				c.state = TargetDomainTable
+
+				// Render the URL rows from previously recorded offset
+				c.table.SetColumns(URLColumns)
+				c.table.SetRows(rows)
+			}
+
 		case "q", "ctrl+c":
 			return c, tea.Quit
 		case "enter":
@@ -150,14 +213,8 @@ func (c *CLI) RenderURLsTable() error {
 		return fmt.Errorf("Error getting domain rows: %w", err)
 	}
 
-	columns := []table.Column{
-		{Title: "STATUS", Width: 6},
-		{Title: "URL", Width: 139},
-		{Title: "QUERY PARAMS", Width: 20},
-	}
-
 	c.table.SetHeight(tableHeightHalfScreen)
-	c.table.SetColumns(columns)
+	c.table.SetColumns(URLColumns)
 	c.table.SetRows(rows)
 
 	if _, err := tea.NewProgram(c).Run(); err != nil {
@@ -187,18 +244,8 @@ func (c *CLI) RenderStatsTable() error {
 		},
 	}
 
-	columns := []table.Column{
-		{Title: "Total Found URLs", Width: 16},
-		{Title: "Total New URLs", Width: 14},
-		{Title: "Total Found Ports", Width: 17},
-		{Title: "Total New Ports", Width: 15},
-		{Title: "Scan duration", Width: 13},
-		{Title: "Scan time", Width: 20},
-		{Title: "Is Running", Width: 10},
-	}
-
 	c.table.SetHeight(tableHeightOne)
-	c.table.SetColumns(columns)
+	c.table.SetColumns(StatsColumns)
 	c.table.SetRows(rows)
 
 	fmt.Println(c.View())
@@ -214,6 +261,20 @@ func (c *CLI) GetDomainRows() ([]table.Row, error) {
 	var rows []table.Row
 	for _, domain := range domains {
 		rows = append(rows, table.Row{strconv.Itoa(domain.StatusCode), domain.URL})
+	}
+
+	return rows, nil
+}
+
+func (c *CLI) GetPortRowsCols(ports []models.Port) ([]table.Row, error) {
+	var rows []table.Row
+	for _, port := range ports {
+		portStr := strconv.Itoa(port.Port)
+		if portStr == "" {
+			return nil, fmt.Errorf("Failed to get rows for port: Could not convert port number to string %v", port.Port)
+		}
+
+		rows = append(rows, table.Row{portStr, string(port.Protocol), string(port.State)})
 	}
 
 	return rows, nil
@@ -237,6 +298,28 @@ func GetDomainsByTarget(target string, offset int) ([]models.Domain, error) {
 	}
 
 	return ret.Domains, nil
+}
+
+func GetPortsByDomain(domainURL string) ([]models.Port, error) {
+	param := url.Values{}
+	param.Add("domain_url", domainURL)
+	url := fmt.Sprintf("%s/ports?%s", apiURL, param.Encode())
+	res, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("Could not get domains for domain %s: %w", domainURL, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+	}
+
+	var ret models.PortListResponse
+	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
+		return nil, fmt.Errorf("Failed to decode API response: %w", err)
+	}
+
+	return ret.Ports, nil
 }
 
 func GetTargetByName(target string) (models.Target, error) {

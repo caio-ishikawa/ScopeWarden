@@ -2,7 +2,7 @@ package modules
 
 import (
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"github.com/caio-ishikawa/target-tracker/daemon/models"
 	"gopkg.in/yaml.v3"
 	"net/url"
 	"os"

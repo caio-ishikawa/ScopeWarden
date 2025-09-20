@@ -3,8 +3,8 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/shared/models"
-	"github.com/caio-ishikawa/target-tracker/shared/store"
+	"github.com/caio-ishikawa/target-tracker/daemon/models"
+	"github.com/caio-ishikawa/target-tracker/daemon/store"
 	"github.com/google/uuid"
 	"log"
 	"net/http"
@@ -37,7 +37,7 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 
 	targetUUID := query.Get("target_uuid")
 	if targetUUID == "" {
-		log.Println("no target uuid")
+		log.Println("[API] No target uuid or domain url")
 		http.Error(w, "No target UUID", http.StatusBadRequest)
 		return
 	}
@@ -197,6 +197,50 @@ func (a API) insertTarget(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (a API) getPortsByDomain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+
+	domainURL := query.Get("domain_url")
+	if domainURL == "" {
+		log.Println("no domain url")
+		http.Error(w, "No domain url", http.StatusBadRequest)
+		return
+	}
+
+	domain, err := a.db.GetDomainByURL(domainURL)
+	if err != nil {
+		log.Println(err.Error())
+		http.Error(w, fmt.Sprintf("Could not get domain by URL: %s", err.Error()), http.StatusInternalServerError)
+	}
+
+	if domain == nil {
+		http.Error(w, fmt.Sprintf("Could not find domain by URL %s", domainURL), http.StatusNotFound)
+	}
+
+	scopes, err := a.db.GetPortByDomain(domain.UUID)
+	if err != nil {
+		log.Println(err.Error())
+		http.Error(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
+		return
+	}
+
+	resStruct := models.PortListResponse{
+		Ports: scopes,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -245,6 +289,7 @@ func (a API) StartAPI() error {
 	http.HandleFunc("/insert_target", a.insertTarget)
 	http.HandleFunc("/target", a.getTargetByName)
 	http.HandleFunc("/stats", a.getStats)
+	http.HandleFunc("/ports", a.getPortsByDomain)
 
 	log.Println("API listening on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

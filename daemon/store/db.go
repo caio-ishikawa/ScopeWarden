@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"github.com/caio-ishikawa/target-tracker/daemon/models"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -138,7 +138,7 @@ func (db Database) UpdateScope(scope models.Scope) error {
 
 // TODO: rename to GetDomainsByTarget
 func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
-	query := fmt.Sprintf("SELECT url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+	query := fmt.Sprintf("SELECT uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all domain: %w", err)
@@ -148,7 +148,7 @@ func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]
 	var results []models.Domain
 	for rows.Next() {
 		var item models.Domain
-		if err := rows.Scan(&item.URL, &item.StatusCode); err != nil {
+		if err := rows.Scan(&item.UUID, &item.URL, &item.StatusCode); err != nil {
 			return nil, fmt.Errorf("Failed to scan domain row: %w", err)
 		}
 
@@ -263,6 +263,30 @@ func (db Database) GetPortByNumberAndDomain(portNum int, domainUUID string) (*mo
 	}
 
 	return &port, nil
+}
+
+func (db Database) GetPortByDomain(domainUUID string) ([]models.Port, error) {
+	rows, err := db.connection.Query("SELECT uuid, port, protocol, port_state, last_updated FROM port WHERE domain_uuid = ?", domainUUID)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get all ports: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.Port
+	for rows.Next() {
+		var item models.Port
+		if err := rows.Scan(&item.UUID, &item.Port, &item.Protocol, &item.State, &item.LastUpdated); err != nil {
+			return nil, fmt.Errorf("Failed to scan port row: %w", err)
+		}
+
+		results = append(results, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("Rows error when getting port: %w", err)
+	}
+
+	return results, nil
 }
 
 func (db Database) InsertDaemonStats(stats models.DaemonStats) error {
