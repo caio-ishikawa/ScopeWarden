@@ -60,7 +60,7 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := a.db.GetDomainsPerTarget(limit, offset, targetUUID)
+	domains, err := a.db.GetDomainsByTarget(limit, offset, targetUUID)
 	resStruct := models.DomainListResponse{
 		Domains: domains,
 	}

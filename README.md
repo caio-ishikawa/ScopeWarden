@@ -5,3 +5,6 @@ TODO:
 - [] Move db to daemon now that comms are through the API
 - [] Add nmap module
 - [] Dockerize ?
+
+
+There should be a bruteforced table, and the CLI should show the amount of 200 response bruteforced paths for a given domain

@@ -9,6 +9,7 @@ import (
 	"github.com/caio-ishikawa/target-tracker/daemon/store"
 	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"github.com/google/uuid"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
 
 type Daemon struct {
@@ -104,6 +107,7 @@ func (a *Daemon) RunDaemon() {
 			log.Printf("%s", err.Error())
 		}
 
+		// Run scope scans
 		for _, scope := range scopes {
 			target, err := a.db.GetTarget(scope.TargetUUID)
 			if err != nil {
@@ -118,13 +122,14 @@ func (a *Daemon) RunDaemon() {
 
 			// Set up output channel & run modules
 			outputChan := make(chan modules.ToolOutput, 1000)
-			defer close(outputChan)
-			go a.ConsumeRealTime(outputChan, target, scope.FirstRun)
-			for _, module := range a.config.Tools {
-				log.Printf("Running tool %s", module.ID)
+			go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope.FirstRun)
+			for _, tool := range a.config.Tools {
+				if tool.TargetTable == models.ScopeTable {
+					log.Printf("Running tool %s", tool.ID)
 
-				if err := modules.RunModule(module, scope.URL, outputChan); err != nil {
-					log.Printf("Failed to run module %s: %s", module.ID, err.Error())
+					if err := modules.RunModule(tool, scope.URL, outputChan); err != nil {
+						log.Printf("Failed to run module %s: %s", tool.ID, err.Error())
+					}
 				}
 			}
 
@@ -134,8 +139,6 @@ func (a *Daemon) RunDaemon() {
 				newScope.FirstRun = false
 				a.db.UpdateScope(newScope)
 			}
-
-			// Get all domains for the target after running domain scan
 		}
 
 		// Reset stats when scan ends
@@ -157,26 +160,30 @@ func (a *Daemon) Stats() models.DaemonStats {
 }
 
 // Consume real-time output of a tool
-func (a *Daemon) ConsumeRealTime(inputChan chan modules.ToolOutput, resource models.Resource, firstRun bool) {
+func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.ToolOutput, target models.TargetTables, firstRun bool) {
 	httpClient := http.Client{
 		Timeout: 5 * time.Second,
 	}
 
 	// Generic input processing in case more tables are added later
 	for input := range inputChan {
-		switch input.Tool.Table {
+		switch table {
 		case models.DomainTable:
-			if err := a.processURLOutput(httpClient, input, firstRun, resource); err != nil {
+			if err := a.processURLOutput(httpClient, input, firstRun, target); err != nil {
+				log.Println(err.Error())
+			}
+		case models.BruteforcedTable:
+			if err := a.processBruteForceResults(input, target, firstRun); err != nil {
 				log.Println(err.Error())
 			}
 		default:
-			log.Printf("Failed to consume data for tool %s: Unknown table: %s", input.Tool.ID, input.Tool.Table)
+			log.Printf("Failed to consume output: Invalid table %s", table)
 		}
 	}
 }
 
 // Process URL output for a tool (parses, inserts/updates DB, notifies)
-func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, firstRun bool, resource models.Resource) error {
+func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables) error {
 	log.Printf("Processing URL %s", input.Output)
 
 	parsed, err := url.Parse(input.Output)
@@ -189,6 +196,28 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	if err != nil {
 		log.Printf("Failed to make request to URL %s: %s", input.Output, err.Error())
 		return nil
+	}
+
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Printf("Failed to read response body for %s: %s", input.Output, err.Error())
+		return nil
+	}
+
+	wappalyzerClient, err := wappalyzer.New()
+	if err != nil {
+		log.Printf("Failed to start wappalyzer client: %s", err.Error())
+		return nil
+	}
+
+	technologies := make([]string, 0)
+	fingerprints := wappalyzerClient.Fingerprint(res.Header, data)
+	for fingerprintKey := range fingerprints {
+		technologies = append(technologies, fingerprintKey)
+	}
+
+	if len(technologies) > 0 {
+		log.Printf("Found fingerprints for %s: %s", input.Output, strings.Join(technologies, ", "))
 	}
 
 	// Increment found URLs
@@ -217,7 +246,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	}
 
 	notification := models.Notification{
-		TargetName: resource.ResourceName(),
+		TargetName: target.GetNotificationName(),
 		Type:       models.URLUpdate,
 		Content:    baseURL,
 	}
@@ -230,7 +259,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 		toInsert := models.Domain{
 			UUID:       uuid.NewString(),
-			TargetUUID: resource.ResourceUUID(),
+			TargetUUID: target.GetUUID(),
 			URL:        baseURL,
 			IPAddress:  "", // TODO: This needs to be updated when running the port scanner
 			StatusCode: statusCode,
@@ -247,7 +276,8 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 			}
 		}
 
-		a.portScan(input.Tool, toInsert, firstRun, resource)
+		a.portScan(input.Tool, toInsert, firstRun, target)
+		a.bruteForce(input.Tool, toInsert, firstRun, technologies)
 
 		return nil
 	}
@@ -261,7 +291,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 		toInsert := models.Domain{
 			UUID:        domain.UUID,
-			TargetUUID:  resource.ResourceUUID(),
+			TargetUUID:  target.GetUUID(),
 			URL:         baseURL,
 			IPAddress:   domain.IPAddress,
 			StatusCode:  statusCode,
@@ -276,28 +306,29 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 			return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
 		}
 
-		a.portScan(input.Tool, toInsert, firstRun, resource)
+		a.portScan(input.Tool, toInsert, firstRun, target)
+		a.bruteForce(input.Tool, toInsert, firstRun, technologies)
 	}
 
 	return nil
 }
 
 // Run port scan synchronously and process results for a specific domain
-func (a *Daemon) portScan(tool modules.Tool, domain models.Domain, firstRun bool, resource models.Resource) {
+func (a *Daemon) portScan(tool modules.Tool, domain models.Domain, firstRun bool, target models.TargetTables) {
 	if tool.PortScanConfig.Run {
 		portScanRes, err := modules.RunPortScan(tool, domain, firstRun)
 		if err != nil {
 			log.Printf("Failed to run port scan for domain %s: %s", domain.URL, err.Error())
 		}
 
-		if err := a.processPortScan(portScanRes, domain, firstRun, resource); err != nil {
+		if err := a.processPortScan(portScanRes, domain, firstRun, target); err != nil {
 			log.Printf("Failed to process port scan result: %s", err.Error())
 		}
 	}
 }
 
 // Process port scan output for (parses, inserts/updates DB, notifies)
-func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun bool, resource models.Resource) error {
+func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun bool, target models.TargetTables) error {
 	resBuf := bytes.NewBuffer(scanRes)
 	scanner := bufio.NewScanner(resBuf)
 	re, err := regexp.Compile(modules.PortRegex)
@@ -369,7 +400,7 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 		}
 
 		notification := models.Notification{
-			TargetName: resource.ResourceName(),
+			TargetName: target.GetNotificationName(),
 			Type:       models.URLUpdate,
 			Content:    foundPort.FormatPortResult(),
 		}
@@ -412,6 +443,56 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 			}
 		}
 	}
+
+	return nil
+}
+
+// Runs brute force command asynchronously
+func (a *Daemon) bruteForce(tool modules.Tool, domain models.Domain, firstRun bool, technologies []string) {
+	if tool.BruteForceConfig.Run {
+		outputChan := make(chan modules.ToolOutput, 1000)
+		go a.ConsumeRealTime(models.BruteforcedTable, outputChan, domain, firstRun)
+		modules.RunBruteForce(tool, domain, firstRun, technologies, outputChan)
+	}
+}
+
+func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain models.TargetTables, firstRun bool) error {
+	newBruteForced := models.BruteForced{
+		DomainUUID:  domain.GetUUID(),
+		Path:        input.Output,
+		FirstRun:    firstRun,
+		LastUpdated: time.Now().String(),
+	}
+
+	notification := models.Notification{
+		TargetName: domain.GetNotificationName(),
+		Type:       models.URLUpdate,
+		Content:    input.Output,
+	}
+
+	existingBruteForced, err := a.db.GetBruteForcedByPath(input.Output)
+	if err != nil {
+		return fmt.Errorf("Failed to get existing bruteforced path: %w", err)
+	}
+
+	if existingBruteForced == nil {
+		if err := a.db.InsertBruteForced(newBruteForced); err != nil {
+			return fmt.Errorf("Failed to process bruteforced path: %w", err)
+		}
+
+		if !firstRun {
+			a.telegram.SendMessage(notification)
+		}
+
+		return nil
+	}
+
+	newBruteForced.UUID = existingBruteForced.UUID
+	if err := a.db.UpdateBruteForced(newBruteForced); err != nil {
+		return fmt.Errorf("Failed to process bruteforced path: %w", err)
+	}
+
+	a.telegram.SendMessage(notification)
 
 	return nil
 }

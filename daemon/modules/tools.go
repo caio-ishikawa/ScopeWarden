@@ -34,7 +34,7 @@ func RunModule(tool Tool, targetURL string, outputChan chan ToolOutput) error {
 
 	switch tool.ParserConfig.Type {
 	case RealTimeOutput:
-		runCmdAsync(tool, execution, outputChan)
+		runCmdAsync(tool, tool.ParserConfig.Regex, execution, outputChan)
 	case FileOutput:
 		// TODO: file output
 	default:
@@ -44,6 +44,7 @@ func RunModule(tool Tool, targetURL string, outputChan chan ToolOutput) error {
 	return nil
 }
 
+// TODO: Move to yaml.go
 func parseModuleCommand(module Tool, targetURL string) (CommandExecution, error) {
 	split := strings.Split(module.Cmd, " ")
 	if len(split) == 0 {
@@ -59,7 +60,7 @@ func parseModuleCommand(module Tool, targetURL string) (CommandExecution, error)
 			continue
 		}
 
-		if s == ScopePlaceholder {
+		if s == TargetPlaceholder {
 			args = append(args, targetURL)
 			detectedScopePlaceholder = true
 			continue
@@ -77,7 +78,7 @@ func parseModuleCommand(module Tool, targetURL string) (CommandExecution, error)
 	return output, nil
 }
 
-func runCmdAsync(tool Tool, command CommandExecution, outputChan chan ToolOutput) {
+func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan chan ToolOutput) {
 	cmd := exec.Command(command.command, command.args...)
 
 	stdout, err := cmd.StdoutPipe()
@@ -99,7 +100,7 @@ func runCmdAsync(tool Tool, command CommandExecution, outputChan chan ToolOutput
 
 	go func() {
 		defer wg.Done()
-		re := regexp.MustCompile(tool.ParserConfig.Regex)
+		re := regexp.MustCompile(regex)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			output := scanner.Text()
@@ -141,7 +142,7 @@ func runCmdAsync(tool Tool, command CommandExecution, outputChan chan ToolOutput
 func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error) {
 	log.Printf("Running port scan for %s", domain.URL)
 
-	commandExecution, err := tool.GeneratePortScanCmd(domain.URL)
+	commandExecution, err := GeneratePortScanCmd(tool.PortScanConfig.Ports, domain.URL)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to generate port scan command: %w", err)
 	}
@@ -160,4 +161,25 @@ func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error)
 	}
 
 	return stdout.Bytes(), nil
+}
+
+func RunBruteForce(tool Tool, domain models.Domain, firstRun bool, technologies []string, outputChan chan ToolOutput) {
+
+	for _, tech := range technologies {
+		commandExecution, err := GenerateBruteForceCmd(tool.BruteForceConfig, domain.URL, tech)
+		if err != nil {
+			log.Printf("Failed to generate port scan command: %s", err.Error())
+			continue
+		}
+
+		// Ignore if no command is returned for specific technology
+		if commandExecution == nil {
+			continue
+		}
+
+		log.Printf("Running brute force for %s for technology %s", domain.URL, tech)
+
+		// Run brute force asynchronously
+		runCmdAsync(tool, tool.BruteForceConfig.Regex, *commandExecution, outputChan)
+	}
 }

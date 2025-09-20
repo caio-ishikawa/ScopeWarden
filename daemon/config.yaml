@@ -3,8 +3,9 @@ global:
 
 tools:
   - id: gau
-    command: 'gau <scope>'
+    command: 'gau <target>'
     table: 'domain'
+    target_table: 'scope'
     verbose: false
     port_scan:
       run: true
@@ -15,13 +16,23 @@ tools:
         - 5432
         - 3306
         - 9092
+    brute_force:
+      run: true
+      command: 'gobuster dir -u <target> -t 5 -w <wordlist> --delay 1000ms' 
+      regex: '^\/\S*$'
+      conditions:
+        - technology: 'php'
+          wordlist: '$SECLISTS/Discovery/Web-Content/Programming-Language-Specific/Common-PHP-Filenames.txt'
+        - technology: 'wordpress'
+          wordlist: ''
     parser:
       type: 'realtime'
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
     
   - id: waymore
-    command: 'waymore -i <scope>'
+    command: 'waymore -i <target>'
     table: 'domain'
+    target_table: 'scope'
     verbose: false
     port_scan:
       run: true

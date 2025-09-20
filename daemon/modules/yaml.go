@@ -15,8 +15,9 @@ const (
 	RealTimeOutput OutputType = "realtime"
 	FileOutput     OutputType = "file"
 
-	ScopePlaceholder = "<scope>"
-	PortScanTool     = "nmap"
+	TargetPlaceholder   = "<target>"
+	WordlistPlaceholder = "<wordlist>"
+	PortScanTool        = "nmap"
 )
 
 type GlobalConfig struct {
@@ -30,21 +31,35 @@ type OutputParserConfig struct {
 	Regex string     `yaml:"regex"`
 }
 
+type BruteForceCondition struct {
+	Technology string `yaml:"technology"`
+	Wordlist   string `yaml:"wordlist"`
+}
+
+type BruteForceConfig struct {
+	Run        bool                  `yaml:"run"`
+	Cmd        string                `yaml:"command"`
+	Regex      string                `yaml:"regex"`
+	Conditions []BruteForceCondition `yaml:"conditions"`
+}
+
 type PortScanConfig struct {
 	Run   bool     `yaml:"run"`
 	Ports []string `yaml:"ports"`
 }
 
 type Tool struct {
-	ID             string             `yaml:"id"`
-	Cmd            string             `yaml:"command"`
-	Table          models.Table       `yaml:"table"`
-	VerboseLogging bool               `yaml:"verbose"`
-	PortScanConfig PortScanConfig     `yaml:"port_scan"`
-	ParserConfig   OutputParserConfig `yaml:"parser"`
+	ID               string             `yaml:"id"`
+	Cmd              string             `yaml:"command"`
+	Table            models.Table       `yaml:"table"`
+	TargetTable      models.Table       `yaml:"target_table"`
+	VerboseLogging   bool               `yaml:"verbose"`
+	PortScanConfig   PortScanConfig     `yaml:"port_scan"`
+	ParserConfig     OutputParserConfig `yaml:"parser"`
+	BruteForceConfig BruteForceConfig   `yaml:"brute_force"`
 }
 
-func (t *Tool) GeneratePortScanCmd(target string) (CommandExecution, error) {
+func GeneratePortScanCmd(ports []string, target string) (CommandExecution, error) {
 	output := CommandExecution{
 		command: PortScanTool,
 	}
@@ -57,15 +72,55 @@ func (t *Tool) GeneratePortScanCmd(target string) (CommandExecution, error) {
 	scanTarget := parsedTarget.Host
 
 	args := make([]string, 0)
-	if len(t.PortScanConfig.Ports) == 0 {
+	if len(ports) == 0 {
 		args = []string{scanTarget, "-Pn", "-T3"}
 	} else {
-		args = []string{scanTarget, "-Pn", "-T3", "-p", strings.Join(t.PortScanConfig.Ports, ",")}
+		args = []string{scanTarget, "-Pn", "-T3", "-p", strings.Join(ports, ",")}
 	}
 
 	output.args = args
 
 	return output, nil
+}
+
+func GenerateBruteForceCmd(bruteForceConfig BruteForceConfig, target string, technology string) (*CommandExecution, error) {
+	var output CommandExecution
+	foundTechWordlist := false
+	args := make([]string, 0)
+
+	split := strings.Fields(bruteForceConfig.Cmd)
+	for i, s := range split {
+		if i == 0 {
+			output.command = s
+			continue
+		}
+		if s == TargetPlaceholder {
+			args = append(args, target)
+			continue
+		}
+		if s == WordlistPlaceholder {
+			for _, conditions := range bruteForceConfig.Conditions {
+				if conditions.Technology == technology {
+					args = append(args, conditions.Wordlist)
+					foundTechWordlist = true
+					break
+				}
+			}
+
+			// Return nil if no wordlist is found for technology
+			if !foundTechWordlist {
+				return nil, nil
+			}
+
+			continue
+		}
+
+		args = append(args, s)
+	}
+
+	output.args = args
+
+	return &output, nil
 }
 
 type DaemonConfig struct {
@@ -101,6 +156,10 @@ func NewDaemonConfig() (DaemonConfig, error) {
 
 		if tool.ParserConfig.Regex == "" {
 			return DaemonConfig{}, fmt.Errorf("Invalid config yaml: Empty regex for tool %s", tool.ID)
+		}
+
+		if tool.BruteForceConfig.Run {
+
 		}
 	}
 

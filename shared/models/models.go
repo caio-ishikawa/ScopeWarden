@@ -11,6 +11,7 @@ const (
 	ScopeTable       Table = "scope"
 	DomainTable      Table = "domain"
 	PortTable        Table = "port"
+	BruteforcedTable Table = "bruteforced"
 	DaemonStatsTable Table = "daemon_stats"
 
 	Open     PortState = "open"
@@ -30,9 +31,10 @@ const (
 	Telegram Module = "TELEGRAM"
 )
 
-type Resource interface {
-	ResourceUUID() string
-	ResourceName() string
+// Represents tables in which scans can insert to (currently domain & target)
+type TargetTables interface {
+	GetUUID() string
+	GetNotificationName() string
 }
 
 type Target struct {
@@ -40,11 +42,11 @@ type Target struct {
 	Name string `json:"name"`
 }
 
-func (t *Target) ResourceUUID() string {
+func (t Target) GetUUID() string {
 	return t.UUID
 }
 
-func (t *Target) ResourceName() string {
+func (t Target) GetNotificationName() string {
 	return t.Name
 }
 
@@ -54,16 +56,16 @@ type Domain struct {
 	URL         string `json:"url"`
 	IPAddress   string `json:"ip_address"`
 	StatusCode  int    `json:"status_code"`
+	FirstRun    bool   `json:"first_run"`
 	LastUpdated string `json:"last_updated"`
 }
 
-func (d *Domain) ResourceUUID() string {
-	return d.TargetUUID
+func (d Domain) GetUUID() string {
+	return d.UUID
 }
 
-// TODO: Implement
-func (d *Domain) ResourceName() string {
-	return d.TargetUUID
+func (d Domain) GetNotificationName() string {
+	return d.URL
 }
 
 type Scope struct {
@@ -72,6 +74,14 @@ type Scope struct {
 	URL              string `json:"url"`
 	AcceptSubdomains bool   `json:"accept_subdomains"`
 	FirstRun         bool   `json:"first_run"`
+}
+
+type BruteForced struct {
+	UUID        string `json:"uuid"`
+	DomainUUID  string `json:"domain_uuid"`
+	Path        string `json:"path"`
+	FirstRun    bool   `json:"first_run"`
+	LastUpdated string `json:"last_updated"`
 }
 
 type Port struct {

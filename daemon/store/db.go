@@ -14,6 +14,10 @@ type Database struct {
 	connection *sql.DB
 }
 
+type TargetTable interface {
+	GetAll() []TargetTable
+}
+
 func Init() (Database, error) {
 	// dbPath := os.Getenv("SQLITE_PATH")
 	// if dbPath == "" {
@@ -136,8 +140,7 @@ func (db Database) UpdateScope(scope models.Scope) error {
 	return nil
 }
 
-// TODO: rename to GetDomainsByTarget
-func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
+func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
 	query := fmt.Sprintf("SELECT uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
@@ -380,4 +383,74 @@ func (db Database) GetStats() (*models.DaemonStats, error) {
 	}
 
 	return &stats, nil
+}
+
+func (db Database) GetBruteForcedByPath(path string) (*models.BruteForced, error) {
+	var bruteForced models.BruteForced
+	err := db.connection.QueryRow(
+		`SELECT uuid, domain_uuid, path, first_run, last_updated FROM port WHERE path = ?`,
+		path).Scan(&bruteForced.UUID, &bruteForced.DomainUUID, &bruteForced.Path, &bruteForced.FirstRun, &bruteForced.LastUpdated)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("Failed to get bruteforced path: %w", err)
+	}
+
+	return &bruteForced, nil
+}
+
+func (db Database) GetBruteForcedByDomain(domainUUID string) ([]models.BruteForced, error) {
+	rows, err := db.connection.Query("SELECT uuid, domain_uuid, path, first_run, last_updated FROM port WHERE domain_uuid = ?", domainUUID)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get all ports: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.BruteForced
+	for rows.Next() {
+		var item models.BruteForced
+		if err := rows.Scan(&item.UUID, &item.DomainUUID, &item.Path, &item.FirstRun, &item.LastUpdated); err != nil {
+			return nil, fmt.Errorf("Failed to scan bruteforced path row: %w", err)
+		}
+
+		results = append(results, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("Rows error when getting bruteforced paths: %w", err)
+	}
+
+	return results, nil
+}
+
+func (db Database) InsertBruteForced(bruteForced models.BruteForced) error {
+	if _, err := db.connection.Exec(
+		`INSERT INTO bruteforced(uuid, domain_uuid, path, first_run, last_updated) VALUES ( ?, ?, ?, ?, ?)`,
+		bruteForced.UUID,
+		bruteForced.DomainUUID,
+		bruteForced.Path,
+		bruteForced.FirstRun,
+		bruteForced.LastUpdated,
+	); err != nil {
+		return fmt.Errorf("Failed to insert bruteforced paths: %w", err)
+	}
+
+	return nil
+}
+
+func (db Database) UpdateBruteForced(bruteForced models.BruteForced) error {
+	if _, err := db.connection.Exec(
+		`UPDATE bruteforced SET uuid, domain_uuid, path, first_run, last_updated`,
+		bruteForced.UUID,
+		bruteForced.DomainUUID,
+		bruteForced.Path,
+		bruteForced.FirstRun,
+		bruteForced.LastUpdated,
+	); err != nil {
+		return fmt.Errorf("Failed to update bruteforced paths: %w", err)
+	}
+
+	return nil
 }
