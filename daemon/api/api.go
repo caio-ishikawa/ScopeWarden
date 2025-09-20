@@ -3,8 +3,8 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/daemon/models"
 	"github.com/caio-ishikawa/target-tracker/daemon/store"
+	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"github.com/google/uuid"
 	"log"
 	"net/http"

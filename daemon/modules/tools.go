@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/daemon/models"
+	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"log"
 	"os/exec"
 	"regexp"

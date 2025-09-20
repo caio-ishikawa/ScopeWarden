@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/daemon/models"
+	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"net/http"
 	"net/url"
 	"os/exec"
