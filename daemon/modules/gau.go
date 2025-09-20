@@ -2,48 +2,82 @@ package modules
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"log"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 )
 
-type commandExecution struct {
+const (
+	PortRegex = `^(\d+)\/(tcp|udp|sctp)\s+(open|closed|filtered|unfiltered|open\|filtered|closed\|filtered)\b.*$`
+)
+
+type ToolOutput struct {
+	Output string
+	Tool   Tool
+}
+
+type CommandExecution struct {
 	command string
 	args    []string
 }
 
-func RunModule(module models.Module, scope models.Scope, outputChan chan string) error {
-	var command string
-	var args []string
+func RunModule(tool Tool, targetURL string, outputChan chan ToolOutput) error {
+	execution, err := parseModuleCommand(tool, targetURL)
+	if err != nil {
+		return err
+	}
 
-	switch module {
-	case models.Gau:
-		command = "gau"
-		args = []string{scope.URL}
-	case models.Waymore:
-		command = "waymore"
-		args = []string{"-i", scope.URL}
-		if !scope.AcceptSubdomains {
-			args = append(args, "--no-subs")
-		}
+	switch tool.ParserConfig.Type {
+	case RealTimeOutput:
+		runCmdAsync(tool, execution, outputChan)
+	case FileOutput:
+		// TODO: file output
 	default:
-		return fmt.Errorf("Unknown module: %s", module)
+		return fmt.Errorf("Failed to process parser type: %s", tool.ParserConfig.Type)
 	}
-
-	commandExecution := commandExecution{
-		command: command,
-		args:    args,
-	}
-
-	runCmd(commandExecution, outputChan)
 
 	return nil
 }
 
-func runCmd(command commandExecution, outputChan chan string) {
+func parseModuleCommand(module Tool, targetURL string) (CommandExecution, error) {
+	split := strings.Split(module.Cmd, " ")
+	if len(split) == 0 {
+		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
+	}
+
+	var output CommandExecution
+	args := make([]string, 0)
+	detectedScopePlaceholder := false
+	for i, s := range split {
+		if i == 0 {
+			output.command = s
+			continue
+		}
+
+		if s == ScopePlaceholder {
+			args = append(args, targetURL)
+			detectedScopePlaceholder = true
+			continue
+		}
+
+		args = append(args, s)
+	}
+
+	output.args = args
+
+	if !detectedScopePlaceholder {
+		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
+	}
+
+	return output, nil
+}
+
+func runCmdAsync(tool Tool, command CommandExecution, outputChan chan ToolOutput) {
 	cmd := exec.Command(command.command, command.args...)
 
 	stdout, err := cmd.StdoutPipe()
@@ -55,6 +89,7 @@ func runCmd(command commandExecution, outputChan chan string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
@@ -64,7 +99,7 @@ func runCmd(command commandExecution, outputChan chan string) {
 
 	go func() {
 		defer wg.Done()
-		re := regexp.MustCompile(`^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$`)
+		re := regexp.MustCompile(tool.ParserConfig.Regex)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			output := scanner.Text()
@@ -73,23 +108,56 @@ func runCmd(command commandExecution, outputChan chan string) {
 				log.Printf("[%s] Output %s did not match URL - SKIPPING", models.Gau, output)
 				continue
 			}
-			outputChan <- output
+
+			toolOutput := ToolOutput{
+				Tool:   tool,
+				Output: output,
+			}
+
+			outputChan <- toolOutput
 
 			continue
 		}
 	}()
 
-	go func() {
-		defer wg.Done()
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			fmt.Println("[STDERR]", scanner.Text())
-		}
-	}()
+	if tool.VerboseLogging {
+		go func() {
+			defer wg.Done()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				fmt.Println("[STDERR]", scanner.Text())
+			}
+		}()
+	}
+
 	if err := cmd.Wait(); err != nil {
 		log.Fatal(err)
 	}
 	wg.Wait()
 
 	close(outputChan)
+}
+
+func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error) {
+	log.Printf("Running port scan for %s", domain.URL)
+
+	commandExecution, err := tool.GeneratePortScanCmd(domain.URL)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to generate port scan command: %w", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(commandExecution.command, commandExecution.args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("Failed to run port scan: %w", err)
+	}
+
+	if tool.VerboseLogging {
+		log.Printf("[STDERR] %s", stderr.String())
+	}
+
+	return stdout.Bytes(), nil
 }

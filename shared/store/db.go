@@ -136,9 +136,9 @@ func (db Database) UpdateScope(scope models.Scope) error {
 	return nil
 }
 
-// Returns a 3d list of strings for use in the CLI
+// TODO: rename to GetDomainsByTarget
 func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
-	query := fmt.Sprintf("SELECT url, query_params, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+	query := fmt.Sprintf("SELECT url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all domain: %w", err)
@@ -148,7 +148,7 @@ func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]
 	var results []models.Domain
 	for rows.Next() {
 		var item models.Domain
-		if err := rows.Scan(&item.URL, &item.QueryParams, &item.StatusCode); err != nil {
+		if err := rows.Scan(&item.URL, &item.StatusCode); err != nil {
 			return nil, fmt.Errorf("Failed to scan domain row: %w", err)
 		}
 
@@ -164,12 +164,11 @@ func (db Database) GetDomainsPerTarget(limit, offset int, targetUUID string) ([]
 
 func (db Database) InsertDomainRecord(domain models.Domain) error {
 	if _, err := db.connection.Exec(
-		`INSERT INTO domain (uuid, target_uuid, url, status_code, query_params) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO domain (uuid, target_uuid, url, status_code) VALUES (?, ?, ?, ?)`,
 		domain.UUID,
 		domain.TargetUUID,
 		domain.URL,
 		domain.StatusCode,
-		domain.QueryParams,
 	); err != nil {
 		return fmt.Errorf("Failed to insert domain: %w", err)
 	}
@@ -224,9 +223,11 @@ func (db Database) GetDomainByURL(url string) (*models.Domain, error) {
 
 func (db Database) InsertPort(port models.Port) error {
 	if _, err := db.connection.Exec(
-		`INSERT INTO port (uuid, domain_uuid, port, port_state) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO port (uuid, domain_uuid, port, protocol, port_state) VALUES (?, ?, ?, ?, ?)`,
 		port.UUID,
 		port.DomainUUID,
+		port.Port,
+		port.Protocol,
 		port.State,
 	); err != nil {
 		return fmt.Errorf("Failed to insert target: %w", err)
@@ -237,10 +238,10 @@ func (db Database) InsertPort(port models.Port) error {
 
 func (db Database) UpdatePort(port models.Port) error {
 	if _, err := db.connection.Exec(
-		`UPDATE port SET port = ?, port_state = ?, last_updated = ?`,
-		port.Port,
+		`UPDATE port SET port_state = ?, last_updated = ? where uuid = ?`,
 		port.State,
-		time.Now(),
+		port.LastUpdated,
+		port.UUID,
 	); err != nil {
 		return fmt.Errorf("Failed to insert target: %w", err)
 	}
@@ -248,11 +249,11 @@ func (db Database) UpdatePort(port models.Port) error {
 	return nil
 }
 
-func (db Database) GetPort(domainUUID string) (*models.Port, error) {
+func (db Database) GetPortByNumberAndDomain(portNum int, domainUUID string) (*models.Port, error) {
 	var port models.Port
 	err := db.connection.QueryRow(
-		`SELECT uuid, domain_uuid, port, state, last_updated FROM domain WHERE domain_uuid = ?`,
-		domainUUID).Scan(&port.UUID, &port.DomainUUID, &port.Port, &port.State, &port.LastUpdated)
+		`SELECT uuid, domain_uuid, port, protocol, port_state, last_updated FROM port WHERE port = ? AND domain_uuid = ?`,
+		portNum, domainUUID).Scan(&port.UUID, &port.DomainUUID, &port.Port, &port.Protocol, &port.State, &port.LastUpdated)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

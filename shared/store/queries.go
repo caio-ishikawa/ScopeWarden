@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS domain (
 	uuid TEXT NOT NULL UNIQUE,
 	target_uuid TEXT NOT NULL,
 	url TEXT NOT NULL UNIQUE,
-	query_params TEXT,
 	ip_address TEXT,
 	status_code INTEGER NOT NULL,
 	last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -26,6 +25,7 @@ CREATE TABLE IF NOT EXISTS port (
 	uuid TEXT NOT NULL UNIQUE,
 	domain_uuid TEXT NOT NULL,
 	port INTEGER NOT NULL,
+	protocol TEXT NOT NULL,
 	port_state TEXT NOT NULL,
 	last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

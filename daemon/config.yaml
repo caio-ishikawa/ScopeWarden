@@ -1,0 +1,38 @@
+global:
+  schedule: 12
+
+tools:
+  - id: gau
+    command: 'gau <scope>'
+    table: 'domain'
+    verbose: false
+    port_scan:
+      run: true
+      ports:
+        - 21
+        - 22
+        - 53
+        - 5432
+        - 3306
+        - 9092
+    parser:
+      type: 'realtime'
+      regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+    
+  - id: waymore
+    command: 'waymore -i <scope>'
+    table: 'domain'
+    verbose: false
+    port_scan:
+      run: true
+      ports:
+        - 21
+        - 22
+        - 53
+        - 5432
+        - 3306
+        - 9092
+    parser:
+      type: 'realtime'
+      regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+

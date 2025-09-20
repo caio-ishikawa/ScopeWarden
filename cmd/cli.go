@@ -213,7 +213,7 @@ func (c *CLI) GetDomainRows() ([]table.Row, error) {
 
 	var rows []table.Row
 	for _, domain := range domains {
-		rows = append(rows, table.Row{strconv.Itoa(domain.StatusCode), domain.URL, domain.QueryParams})
+		rows = append(rows, table.Row{strconv.Itoa(domain.StatusCode), domain.URL})
 	}
 
 	return rows, nil
