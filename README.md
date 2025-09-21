@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="scopewarden.png" width=300 height=300>
+    <img src="assets/scopewarden.png" width=300 height=300>
 </div>
 
 ## 💻 Introduction
@@ -13,22 +13,26 @@ ScopeWarden is a self-hostable and configurable automated recon tool. It allows 
 
 ## 📦 Installation
 ### Daeomn/API
-TODO
+1. Clone the repository.
+2. In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
+3. If you want the daemon to run as a service in Linux, run `sudo make attach-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
+4. If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
+
 ### CLI
-TODO
+1. Clone the repository
+2. In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
+3. Check installation with `scopewarden -h`.
 
 ## 🚀 Setup
 ### Daemon & API
-The scan daemon and API will automatically start running if you installed it with `make install-daemon`.
-If you installed it via go install, follow these steps:
-1. TODO 
-2. TODO
-3. TODO
+The daemon that runs the scans and the API can be started with `scopewarden-daemon`. Alternatively, it can be set up an
+
+### CLI
 
 ### Telegram Notifications
 In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
-- *Set up bot token:* https://core.telegram.org/bots/features#botfather
-- *To get your chat ID:* https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
+- **Set up bot token:** https://core.telegram.org/bots/features#botfather
+- **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
 
 ## 🔧 Configuration
 By default, ScopeWarden will not run any tools in the scan. It will continuously loop trying to find the desired configuration yaml file.
@@ -55,9 +59,9 @@ This configuration file defines global settings, tools, scanning options, and pa
     - **run**: `true` or `false` — enable brute force scans.  
     - **command**: The fuzzing command. It supports placeholders`<target>` for the target URL and `<wordlist>` representing the path of the worlist to use.  
     - **regex**: Regex to filter valid results from fuzzing output.
-    - **conditions**: Optional list of technology-specific wordlists:
+    - **conditions**: Optional list of technology-specific wordlists. Will run the brute force command for **every found domain** if empty or non-existant:
       - **technology**: Target technology to run the scan. This is not case-sensitive. (e.g., `php`, `wordpress`).
-      - **wordlist**: Path to the wordlist to use for that technology.
+      - **wordlist**: Path to the wordlist to use for that technology. Expects absolute path.
 
 - **Output Parser**
     Defines how the tool output is processed:
@@ -101,12 +105,12 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
 ```
 Usage of bin/cmd:
   -iS string
-        Comma-separated values for scope. First value should be target name, the second should be a boolean value representing the accept_subdomain field, and the followingvalues will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>
+        Comma-separated values for scope. First value should be target name, the second should be a boolean value representing the accept_subdomain field, and the followingvalues will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>)
   -iT string
-        Insert target (<target_name>
+        Insert target (<target_name>)
   -s    Show stats
   -t string
-        Show target stats based on target name (<target_name>
+        Show target stats based on target name (<target_name>)
 ```
 #### Examples 
 - Add target:

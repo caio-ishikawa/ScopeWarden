@@ -161,7 +161,7 @@ type DaemonConfig struct {
 }
 
 func NewDaemonConfig() (DaemonConfig, error) {
-	configFilePath := os.Getenv("TARGET_TRACKER_CONFIG")
+	configFilePath := os.Getenv("SCOPEWARDEN_CONFIG")
 	if configFilePath == "" {
 		return DaemonConfig{}, fmt.Errorf("Failed to read config yaml: config file path not set")
 	}

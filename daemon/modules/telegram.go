@@ -19,7 +19,7 @@ type TelegramClient struct {
 }
 
 func NewTelegramClient() (TelegramClient, error) {
-	chatIDStr := os.Getenv("TELEGRAM_CHAT_ID")
+	chatIDStr := os.Getenv("SCOPEWARDEN_TELEGRAM_CHAT_ID")
 	if chatIDStr == "" {
 		return TelegramClient{}, fmt.Errorf("Failed to create telegram client: No client ID")
 	}
@@ -29,7 +29,7 @@ func NewTelegramClient() (TelegramClient, error) {
 		return TelegramClient{}, fmt.Errorf("Invalid telegram chat ID: %s", chatIDStr)
 	}
 
-	apiKey := os.Getenv("TELEGRAM_API_KEY")
+	apiKey := os.Getenv("SCOPEWARDEN_TELEGRAM_API_KEY")
 	if apiKey == "" {
 		return TelegramClient{}, fmt.Errorf("Failed to create telegram client: No API key")
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 )
@@ -338,8 +339,15 @@ func (a API) StartAPI() error {
 	http.HandleFunc("/ports", a.getPortsByDomain)
 	http.HandleFunc("/bruteforced", a.getBruteForcedPathsByDomain)
 
-	log.Println("API listening on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	apiPort := os.Getenv("SCOPEWARDEN_API_PORT")
+	if apiPort == "" {
+		apiPort = "8080"
+	}
+
+	apiPort = fmt.Sprintf(":%s", apiPort)
+
+	log.Printf("API listening on %s", apiPort)
+	if err := http.ListenAndServe(apiPort, nil); err != nil {
 		return fmt.Errorf("Error server API on port :8080, %w", err)
 	}
 

@@ -19,12 +19,7 @@ type TargetTable interface {
 }
 
 func Init() (Database, error) {
-	// dbPath := os.Getenv("SQLITE_PATH")
-	// if dbPath == "" {
-	// 	return Database{}, fmt.Errorf("Failed to get DB path from environment variable")
-	// }
-
-	db, err := sql.Open("sqlite3", "./test.db")
+	db, err := sql.Open("sqlite3", "./scopewarden.db")
 	if err != nil {
 		return Database{}, fmt.Errorf("Failed to start DB connection: %w", err)
 	}
@@ -62,10 +57,15 @@ func (db Database) GetTarget(uuid string) (*models.Target, error) {
 }
 
 func (db Database) RemoveTarget(targetUUID uuid.UUID) error {
-	// TODO: delete from other tables too
 	if _, err := db.connection.Exec(`DELETE FROM target WHERE uuid = ?`, targetUUID); err != nil {
 		return fmt.Errorf("Failed to delete target: %w", err)
 	}
+
+	if _, err := db.connection.Exec(`DELETE FROM domain WHERE target_uuid = ?`, targetUUID); err != nil {
+		return fmt.Errorf("Failed to delete target: %w", err)
+	}
+
+	// TODO: delete from port, scope, bruteforced tables too
 
 	return nil
 }

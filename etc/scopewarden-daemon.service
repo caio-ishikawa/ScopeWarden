@@ -1,0 +1,16 @@
+[Unit]
+Description=ScopeWarden scan daemon & API
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/scopewarden-daemon
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+User=nobody
+Group=nobody
+
+[Install]
+WantedBy=multi-user.target
