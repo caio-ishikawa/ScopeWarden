@@ -12,6 +12,10 @@ type PortListResponse struct {
 	Ports []Port `json:"port"`
 }
 
+type BruteForcedListResponse struct {
+	BruteForcedPaths []BruteForced `json:"bruteforced"`
+}
+
 type InsertScopeRequest struct {
 	TargetName       string `json:"target_name"`
 	URL              string `json:"url"`

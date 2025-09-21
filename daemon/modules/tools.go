@@ -88,11 +88,13 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to run command %s: %s", command.command, err.Error())
+		return
 	}
 
 	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to run command %s: %s", command.command, err.Error())
+		return
 	}
 
 	var wg sync.WaitGroup
@@ -106,7 +108,7 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 			output := scanner.Text()
 			isURL := re.MatchString(output)
 			if !isURL {
-				log.Printf("[%s] Output %s did not match URL - SKIPPING", models.Gau, output)
+				log.Printf("[%s] Output %s did not match regex - SKIPPING", models.Gau, output)
 				continue
 			}
 
@@ -132,10 +134,10 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 	}
 
 	if err := cmd.Wait(); err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to run command %s: %s", command.command, err.Error())
 	}
-	wg.Wait()
 
+	wg.Wait()
 	close(outputChan)
 }
 

@@ -53,7 +53,11 @@ var (
 	PortColumns = []table.Column{
 		{Title: "Port", Width: 10},
 		{Title: "Protocol", Width: 15},
-		{Title: "State", Width: 11},
+		{Title: "State", Width: 140},
+	}
+
+	BruteForcedColumns = []table.Column{
+		{Title: "Asset", Width: 169},
 	}
 )
 
@@ -63,6 +67,7 @@ const (
 	TargetDomainTable CLIState = "DomainTable"
 	PortsTable        CLIState = "PortState"
 	StatsTable        CLIState = "StatsTable"
+	BruteForcedTable  CLIState = "BruteForcedTable"
 )
 
 type CLI struct {
@@ -87,7 +92,6 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "l":
 			if c.state == TargetDomainTable {
-				// TODO: Check against total size (need total size)
 				c.offset = c.offset + tableLimit
 				rows, err := c.GetDomainRows()
 				if err != nil {
@@ -125,10 +129,14 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return c, tea.Quit
 				}
 
-				rows, err := c.GetPortRowsCols(ports)
+				rows, err := c.GetPortRows(ports)
 				if err != nil {
 					tea.Printf("Failed to get rows and columns for ports: %s", err.Error())
 					return c, tea.Quit
+				}
+
+				if len(rows) == 0 {
+					break
 				}
 
 				c.state = PortsTable
@@ -137,9 +145,33 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				c.table.SetColumns(PortColumns)
 				c.table.SetRows(rows)
 			}
+		case "a":
+			if c.state == TargetDomainTable {
+				bruteForcedPaths, err := GetBruteForcedByDomain(c.table.SelectedRow()[1])
+				if err != nil {
+					tea.Printf("Failed to get bruteforced assets by domain: %s", err.Error())
+					return c, tea.Quit
+				}
+
+				rows, err := c.GetBruteForcedRows(bruteForcedPaths)
+				if err != nil {
+					tea.Printf("Failed to get rows for bruteforced assets: %s", err.Error())
+					return c, tea.Quit
+				}
+
+				if len(rows) == 0 {
+					break
+				}
+
+				c.state = BruteForcedTable
+
+				// Render bruteforced table
+				c.table.SetRows(rows)
+				c.table.SetColumns(BruteForcedColumns)
+			}
 		case "b":
-			// Go back to URL table from ports table
-			if c.state == PortsTable {
+			// Go back to URL table from other tables
+			if c.state == PortsTable || c.state == BruteForcedTable {
 				rows, err := c.GetDomainRows()
 				if err != nil {
 					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
@@ -266,7 +298,7 @@ func (c *CLI) GetDomainRows() ([]table.Row, error) {
 	return rows, nil
 }
 
-func (c *CLI) GetPortRowsCols(ports []models.Port) ([]table.Row, error) {
+func (c *CLI) GetPortRows(ports []models.Port) ([]table.Row, error) {
 	var rows []table.Row
 	for _, port := range ports {
 		portStr := strconv.Itoa(port.Port)
@@ -275,6 +307,15 @@ func (c *CLI) GetPortRowsCols(ports []models.Port) ([]table.Row, error) {
 		}
 
 		rows = append(rows, table.Row{portStr, string(port.Protocol), string(port.State)})
+	}
+
+	return rows, nil
+}
+
+func (c *CLI) GetBruteForcedRows(assets []models.BruteForced) ([]table.Row, error) {
+	var rows []table.Row
+	for _, asset := range assets {
+		rows = append(rows, table.Row{asset.Path})
 	}
 
 	return rows, nil
@@ -320,6 +361,28 @@ func GetPortsByDomain(domainURL string) ([]models.Port, error) {
 	}
 
 	return ret.Ports, nil
+}
+
+func GetBruteForcedByDomain(domainURL string) ([]models.BruteForced, error) {
+	param := url.Values{}
+	param.Add("domain_url", domainURL)
+	url := fmt.Sprintf("%s/bruteforced?%s", apiURL, param.Encode())
+	res, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("Could not get domains for domain %s: %w", domainURL, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+	}
+
+	var ret models.BruteForcedListResponse
+	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
+		return nil, fmt.Errorf("Failed to decode API response: %w", err)
+	}
+
+	return ret.BruteForcedPaths, nil
 }
 
 func GetTargetByName(target string) (models.Target, error) {

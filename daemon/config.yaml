@@ -6,7 +6,7 @@ tools:
     command: 'gau <target>'
     table: 'domain'
     target_table: 'scope'
-    verbose: false
+    verbose: false 
     port_scan:
       run: true
       ports:
@@ -18,11 +18,11 @@ tools:
         - 9092
     brute_force:
       run: true
-      command: 'gobuster dir -u <target> -t 5 -w <wordlist> --delay 1000ms' 
-      regex: '^\/\S*$'
+      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -rate 5'
+      regex: '^[^\/\r\n\\]+\.[^\/\r\n\\]+$'
       conditions:
         - technology: 'php'
-          wordlist: '$SECLISTS/Discovery/Web-Content/Programming-Language-Specific/Common-PHP-Filenames.txt'
+          wordlist: '/home/caio/offsec/resources/seclists/Discovery/Web-Content/Programming-Language-Specific/Common-PHP-Filenames.txt'
         - technology: 'wordpress'
           wordlist: ''
     parser:

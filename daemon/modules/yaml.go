@@ -94,13 +94,13 @@ func GenerateBruteForceCmd(bruteForceConfig BruteForceConfig, target string, tec
 			output.command = s
 			continue
 		}
-		if s == TargetPlaceholder {
-			args = append(args, target)
+		if strings.Contains(s, TargetPlaceholder) {
+			args = append(args, strings.ReplaceAll(s, TargetPlaceholder, target))
 			continue
 		}
 		if s == WordlistPlaceholder {
 			for _, conditions := range bruteForceConfig.Conditions {
-				if conditions.Technology == technology {
+				if strings.ToLower(conditions.Technology) == technology {
 					args = append(args, conditions.Wordlist)
 					foundTechWordlist = true
 					break
@@ -119,6 +119,7 @@ func GenerateBruteForceCmd(bruteForceConfig BruteForceConfig, target string, tec
 	}
 
 	output.args = args
+	fmt.Printf("%s %s\n", output.command, strings.Join(output.args, " "))
 
 	return &output, nil
 }

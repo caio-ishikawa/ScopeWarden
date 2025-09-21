@@ -73,6 +73,14 @@ func (a *Daemon) RunDaemon() {
 		log.Fatalf("Failed to insert initial daemon stats")
 	}
 	for {
+		// Update config before every scan
+		config, err := modules.NewDaemonConfig()
+		if err != nil {
+			log.Printf("Failed to update daemon config: %s", err.Error())
+			time.Sleep(10)
+		}
+		a.config = config
+
 		// Avoid running scan before timeout
 		if a.stats.LastScanEnded != nil {
 			if time.Since(*a.stats.LastScanEnded) < time.Duration(a.config.Global.Schedule)*time.Hour {
@@ -184,47 +192,28 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 
 // Process URL output for a tool (parses, inserts/updates DB, notifies)
 func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables) error {
-	log.Printf("Processing URL %s", input.Output)
-
 	parsed, err := url.Parse(input.Output)
 	if err != nil {
 		return fmt.Errorf("Failed to parse URL %s - SKIPPING", input.Output)
 	}
 
-	// Only process successful requests to avoid noise in DB
-	res, err := httpClient.Get(input.Output)
+	var baseURL string
+	if parsed.Scheme == "https" || parsed.Scheme == "http" {
+		baseURL = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
+	} else if parsed.Scheme == "" {
+		baseURL = parsed.Path
+	}
+
+	log.Printf("Processing URL %s", baseURL)
+
+	// Only send requests to base URL to avoid noise in DB
+	res, err := httpClient.Get(baseURL)
 	if err != nil {
-		log.Printf("Failed to make request to URL %s: %s", input.Output, err.Error())
+		// Only process successful requests to avoid noise in DB
+		log.Printf("Failed to make request to URL %s: %s", baseURL, err.Error())
 		return nil
 	}
-
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		log.Printf("Failed to read response body for %s: %s", input.Output, err.Error())
-		return nil
-	}
-
-	wappalyzerClient, err := wappalyzer.New()
-	if err != nil {
-		log.Printf("Failed to start wappalyzer client: %s", err.Error())
-		return nil
-	}
-
-	technologies := make([]string, 0)
-	fingerprints := wappalyzerClient.Fingerprint(res.Header, data)
-	for fingerprintKey := range fingerprints {
-		technologies = append(technologies, fingerprintKey)
-	}
-
-	if len(technologies) > 0 {
-		log.Printf("Found fingerprints for %s: %s", input.Output, strings.Join(technologies, ", "))
-	}
-
-	// Increment found URLs
-	a.stats.TotalFoundURLs += 1
-	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-		return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
-	}
+	defer res.Body.Close()
 
 	var statusCode int
 	if res == nil {
@@ -233,11 +222,30 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		statusCode = res.StatusCode
 	}
 
-	var baseURL string
-	if parsed.Scheme == "https" || parsed.Scheme == "http" {
-		baseURL = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
-	} else if parsed.Scheme == "" {
-		baseURL = parsed.Path
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		return fmt.Errorf("Failed to read response body for %s: %w", baseURL, err)
+	}
+
+	wappalyzerClient, err := wappalyzer.New()
+	if err != nil {
+		return fmt.Errorf("Failed to start wappalyzer client: %w", err)
+	}
+
+	technologies := make([]string, 0)
+	fingerprints := wappalyzerClient.Fingerprint(res.Header, data)
+	for fingerprintKey := range fingerprints {
+		technologies = append(technologies, strings.ToLower(fingerprintKey))
+	}
+
+	if len(technologies) > 0 {
+		log.Printf("Found fingerprints for %s: %s", baseURL, strings.Join(technologies, ", "))
+	}
+
+	// Increment found URLs
+	a.stats.TotalFoundURLs += 1
+	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+		return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 	}
 
 	domain, err := a.db.GetDomainByURL(baseURL)
@@ -254,7 +262,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	if domain == nil {
 		a.stats.TotalNewURLs += 1
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
+			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 		}
 
 		toInsert := models.Domain{
@@ -266,13 +274,13 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		}
 
 		if err := a.db.InsertDomainRecord(toInsert); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
+			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 		}
 
 		// Notify only if this is not the first run on the scope
 		if !firstRun {
 			if err = a.telegram.SendMessage(notification); err != nil {
-				return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
+				return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 			}
 		}
 
@@ -299,11 +307,11 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		}
 
 		if err := a.db.UpdateDomainRecord(toInsert); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
+			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 		}
 
 		if err = a.telegram.SendMessage(notification); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", input.Output, err)
+			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 		}
 
 		a.portScan(input.Tool, toInsert, firstRun, target)
@@ -457,6 +465,8 @@ func (a *Daemon) bruteForce(tool modules.Tool, domain models.Domain, firstRun bo
 }
 
 func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain models.TargetTables, firstRun bool) error {
+	log.Printf("Processing bruteforced result %s", input.Output)
+
 	newBruteForced := models.BruteForced{
 		DomainUUID:  domain.GetUUID(),
 		Path:        input.Output,
@@ -470,12 +480,13 @@ func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain model
 		Content:    input.Output,
 	}
 
-	existingBruteForced, err := a.db.GetBruteForcedByPath(input.Output)
+	existingBruteForced, err := a.db.GetBruteForcedByPath(input.Output, domain.GetUUID())
 	if err != nil {
 		return fmt.Errorf("Failed to get existing bruteforced path: %w", err)
 	}
 
 	if existingBruteForced == nil {
+		newBruteForced.UUID = uuid.NewString()
 		if err := a.db.InsertBruteForced(newBruteForced); err != nil {
 			return fmt.Errorf("Failed to process bruteforced path: %w", err)
 		}

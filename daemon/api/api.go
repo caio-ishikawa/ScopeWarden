@@ -241,6 +241,52 @@ func (a API) getPortsByDomain(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+
+	domainURL := query.Get("domain_url")
+	if domainURL == "" {
+		log.Println("no domain url")
+		http.Error(w, "No domain url", http.StatusBadRequest)
+		return
+	}
+
+	domain, err := a.db.GetDomainByURL(domainURL)
+	if err != nil {
+		log.Println(err.Error())
+		http.Error(w, fmt.Sprintf("Could not get domain by URL: %s", err.Error()), http.StatusInternalServerError)
+	}
+
+	if domain == nil {
+		errMsg := fmt.Sprintf("Could not find domain by URL %s", domainURL)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusNotFound)
+	}
+
+	bruteForcedPaths, err := a.db.GetBruteForcedByDomain(domain.UUID)
+	if err != nil {
+		log.Println(err.Error())
+		http.Error(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
+		return
+	}
+
+	resStruct := models.BruteForcedListResponse{
+		BruteForcedPaths: bruteForcedPaths,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -290,6 +336,7 @@ func (a API) StartAPI() error {
 	http.HandleFunc("/target", a.getTargetByName)
 	http.HandleFunc("/stats", a.getStats)
 	http.HandleFunc("/ports", a.getPortsByDomain)
+	http.HandleFunc("/bruteforced", a.getBruteForcedPathsByDomain)
 
 	log.Println("API listening on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

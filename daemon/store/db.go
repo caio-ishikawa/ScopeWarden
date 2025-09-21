@@ -385,11 +385,11 @@ func (db Database) GetStats() (*models.DaemonStats, error) {
 	return &stats, nil
 }
 
-func (db Database) GetBruteForcedByPath(path string) (*models.BruteForced, error) {
+func (db Database) GetBruteForcedByPath(path string, domainUUID string) (*models.BruteForced, error) {
 	var bruteForced models.BruteForced
 	err := db.connection.QueryRow(
-		`SELECT uuid, domain_uuid, path, first_run, last_updated FROM port WHERE path = ?`,
-		path).Scan(&bruteForced.UUID, &bruteForced.DomainUUID, &bruteForced.Path, &bruteForced.FirstRun, &bruteForced.LastUpdated)
+		`SELECT uuid, domain_uuid, path, first_run, last_updated FROM bruteforced WHERE path = ? AND domain_uuid = ?`,
+		path, domainUUID).Scan(&bruteForced.UUID, &bruteForced.DomainUUID, &bruteForced.Path, &bruteForced.FirstRun, &bruteForced.LastUpdated)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -402,7 +402,7 @@ func (db Database) GetBruteForcedByPath(path string) (*models.BruteForced, error
 }
 
 func (db Database) GetBruteForcedByDomain(domainUUID string) ([]models.BruteForced, error) {
-	rows, err := db.connection.Query("SELECT uuid, domain_uuid, path, first_run, last_updated FROM port WHERE domain_uuid = ?", domainUUID)
+	rows, err := db.connection.Query("SELECT uuid, domain_uuid, path, first_run, last_updated FROM bruteforced WHERE domain_uuid = ?", domainUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all ports: %w", err)
 	}
