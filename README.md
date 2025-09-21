@@ -1,6 +1,6 @@
 # ScopeWarden
 <div align="center">
-    <img src="scopewarden.png" width=100 height=100>
+    <img src="scopewarden.png" width=300 height=300>
 </div>
 
 ## Introduction
