@@ -1,4 +1,3 @@
-# ScopeWarden
 <div align="center">
     <img src="scopewarden.png" width=300 height=300>
 </div>
@@ -60,64 +59,69 @@ This configuration file defines global settings, tools, scanning options, and pa
       - **technology**: Target technology to run the scan. This is not case-sensitive. (e.g., `php`, `wordpress`).
       - **wordlist**: Path to the wordlist to use for that technology.
 
-#### Output Parser
-Defines how the tool output is processed:
-- **type**: `realtime` (parse output as it is produced) or `file` (parse after completion, reading from an output file).  
-- **regex**: Regular expression to extract relevant information from the tool output.  
+- **Output Parser**
+    Defines how the tool output is processed:
+    - **type**: `realtime` (parse output as it is produced) or `file` (parse after completion, reading from an output file).  
+    - **regex**: Regular expression to extract relevant information from the tool output.  
 
-### Example
-```
-yaml
-global:
-  schedule: 12
-  notify: true
+- **Example**
+    ```
+    yaml
+    global:
+      schedule: 12
+      notify: true
 
-tools:
-  - id: gau
-    command: 'gau <target>'
-    table: 'domain'
-    target_table: 'scope'
-    verbose: false
-    port_scan:
-      run: true
-      ports:
-        - 21
-        - 22
-        - 53
-    brute_force:
-      run: true
-      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -rate 5'
-      regex: '^[^\/\r\n\\]+\.[^\/\r\n\\]+$'
-      conditions:
-        - technology: 'php'
-          wordlist: '/path/to/php-wordlist.txt'
-    parser:
-      type: 'realtime'
-      regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
-```
+    tools:
+      - id: gau
+        command: 'gau <target>'
+        table: 'domain'
+        target_table: 'scope'
+        verbose: false
+        port_scan:
+          run: true
+          ports:
+            - 21
+            - 22
+            - 53
+        brute_force:
+          run: true
+          command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -rate 5'
+          regex: '^[^\/\r\n\\]+\.[^\/\r\n\\]+$'
+          conditions:
+            - technology: 'php'
+              wordlist: '/path/to/php-wordlist.txt'
+        parser:
+          type: 'realtime'
+          regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+    ```
 
 ## 🎯 Usage
 ### CLI
 The CLI allows you to add targets and scopes, as well as view the recon results per target in a interactive table.
-#### Insert Target
-`scopewarden -iT <TARGET_NAME>`
 ```
-scopewarden -iT NASA
+Usage of bin/cmd:
+  -iS string
+        Comma-separated values for scope. First value should be target name, the second should be a boolean value representing the accept_subdomain field, and the followingvalues will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>
+  -iT string
+        Insert target (<target_name>
+  -s    Show stats
+  -t string
+        Show target stats based on target name (<target_name>
 ```
+#### Examples 
+- Add target:
+    ```
+    scopewarden -iT NASA
+    ```
+- Add scope for target:
+    ```
+    scopewarden -iS NASA,nasa.gov,something.com,somethingelse.com
+    ```
+- View table for target:
+    ```
+    scopewarden -t NASA
+    ```
 
-#### Insert Scope
-`scopewarden -iS <TARGET_NAME>,<COMMA_SEPARATED_SCOPE_LIST>`
-Example:
-```
-scopewarden -iS NASA,nasa.gov,something.com,somethingelse.com
-```
-
-#### View Table
-`scopewarden -t <TARGET_NAME>`
-Example:
-```
-scopewarden -t NASA
-```
 #### Navigating interactive table:
 The first table displayed when running -t is the domains table. It shows all domains found when running the configured tools and the status code it received when testing the domain. To navigate the table:
 - **[J,K]**: Used for naviating up and down the tables
