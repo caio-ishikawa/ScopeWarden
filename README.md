@@ -1,4 +1,5 @@
 # ScopeWarden
+<img src="scopewarden.png">
 
 ## Introduction
 ScopeWarden is a self-hostable and configurable automated recon tool. It allows you to automate your workflow without relying on any specific recon tool, and customize the way each scan runs. 
