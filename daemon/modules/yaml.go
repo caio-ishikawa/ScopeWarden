@@ -2,7 +2,6 @@ package modules
 
 import (
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/shared/models"
 	"gopkg.in/yaml.v3"
 	"net/url"
 	"os"
@@ -22,7 +21,8 @@ const (
 
 type GlobalConfig struct {
 	// How frequently the scan runs (in hours)
-	Schedule int `yaml:"schedule"`
+	Schedule int  `yaml:"schedule"`
+	Notify   bool `yaml:"notify"`
 }
 
 type OutputParserConfig struct {
@@ -51,8 +51,6 @@ type PortScanConfig struct {
 type Tool struct {
 	ID               string             `yaml:"id"`
 	Cmd              string             `yaml:"command"`
-	Table            models.Table       `yaml:"table"`
-	TargetTable      models.Table       `yaml:"target_table"`
 	VerboseLogging   bool               `yaml:"verbose"`
 	PortScanConfig   PortScanConfig     `yaml:"port_scan"`
 	ParserConfig     OutputParserConfig `yaml:"parser"`

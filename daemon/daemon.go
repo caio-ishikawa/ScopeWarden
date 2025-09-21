@@ -132,12 +132,10 @@ func (a *Daemon) RunDaemon() {
 			outputChan := make(chan modules.ToolOutput, 1000)
 			go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope.FirstRun)
 			for _, tool := range a.config.Tools {
-				if tool.TargetTable == models.ScopeTable {
-					log.Printf("Running tool %s", tool.ID)
+				log.Printf("Running tool %s", tool.ID)
 
-					if err := modules.RunModule(tool, scope.URL, outputChan); err != nil {
-						log.Printf("Failed to run module %s: %s", tool.ID, err.Error())
-					}
+				if err := modules.RunModule(tool, scope.URL, outputChan); err != nil {
+					log.Printf("Failed to run module %s: %s", tool.ID, err.Error())
 				}
 			}
 
@@ -278,7 +276,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		}
 
 		// Notify only if this is not the first run on the scope
-		if !firstRun {
+		if !firstRun && a.config.Global.Notify {
 			if err = a.telegram.SendMessage(notification); err != nil {
 				return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 			}
@@ -310,8 +308,10 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 		}
 
-		if err = a.telegram.SendMessage(notification); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
+		if a.config.Global.Notify {
+			if err = a.telegram.SendMessage(notification); err != nil {
+				return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
+			}
 		}
 
 		a.portScan(input.Tool, toInsert, firstRun, target)
@@ -431,8 +431,10 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 			}
 
 			// Notify
-			if err = a.telegram.SendMessage(notification); err != nil {
-				log.Printf("%s", err.Error())
+			if a.config.Global.Notify {
+				if err = a.telegram.SendMessage(notification); err != nil {
+					log.Printf("%s", err.Error())
+				}
 			}
 
 			continue
@@ -445,7 +447,7 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 		}
 
 		// Notify if not first run
-		if !firstRun {
+		if !firstRun && a.config.Global.Notify {
 			if err = a.telegram.SendMessage(notification); err != nil {
 				log.Printf("%s", err.Error())
 			}
@@ -491,8 +493,10 @@ func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain model
 			return fmt.Errorf("Failed to process bruteforced path: %w", err)
 		}
 
-		if !firstRun {
-			a.telegram.SendMessage(notification)
+		if !firstRun && a.config.Global.Notify {
+			if err := a.telegram.SendMessage(notification); err != nil {
+				log.Printf("Failed to notify brute force result: %s", err.Error())
+			}
 		}
 
 		return nil
@@ -503,7 +507,11 @@ func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain model
 		return fmt.Errorf("Failed to process bruteforced path: %w", err)
 	}
 
-	a.telegram.SendMessage(notification)
+	if a.config.Global.Notify {
+		if err := a.telegram.SendMessage(notification); err != nil {
+			log.Printf("Failed to notify brute force result: %s", err.Error())
+		}
+	}
 
 	return nil
 }

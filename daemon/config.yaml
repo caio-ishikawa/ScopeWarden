@@ -1,11 +1,10 @@
 global:
   schedule: 12
+  nofity: true
 
 tools:
   - id: gau
     command: 'gau <target>'
-    table: 'domain'
-    target_table: 'scope'
     verbose: false 
     port_scan:
       run: true
@@ -31,8 +30,6 @@ tools:
     
   - id: waymore
     command: 'waymore -i <target>'
-    table: 'domain'
-    target_table: 'scope'
     verbose: false
     port_scan:
       run: true
