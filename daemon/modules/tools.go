@@ -4,11 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"github.com/caio-ishikawa/scopewarden/shared/models"
 	"log"
 	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 )
 
@@ -27,7 +26,7 @@ type CommandExecution struct {
 }
 
 func RunModule(tool Tool, targetURL string, outputChan chan ToolOutput) error {
-	execution, err := parseModuleCommand(tool, targetURL)
+	execution, err := GenerateModuleCommand(tool, targetURL)
 	if err != nil {
 		return err
 	}
@@ -37,45 +36,12 @@ func RunModule(tool Tool, targetURL string, outputChan chan ToolOutput) error {
 		runCmdAsync(tool, tool.ParserConfig.Regex, execution, outputChan)
 	case FileOutput:
 		// TODO: file output
+		return fmt.Errorf("Failed to process parser type: Not implemented")
 	default:
 		return fmt.Errorf("Failed to process parser type: %s", tool.ParserConfig.Type)
 	}
 
 	return nil
-}
-
-// TODO: Move to yaml.go
-func parseModuleCommand(module Tool, targetURL string) (CommandExecution, error) {
-	split := strings.Split(module.Cmd, " ")
-	if len(split) == 0 {
-		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
-	}
-
-	var output CommandExecution
-	args := make([]string, 0)
-	detectedScopePlaceholder := false
-	for i, s := range split {
-		if i == 0 {
-			output.command = s
-			continue
-		}
-
-		if s == TargetPlaceholder {
-			args = append(args, targetURL)
-			detectedScopePlaceholder = true
-			continue
-		}
-
-		args = append(args, s)
-	}
-
-	output.args = args
-
-	if !detectedScopePlaceholder {
-		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
-	}
-
-	return output, nil
 }
 
 func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan chan ToolOutput) {

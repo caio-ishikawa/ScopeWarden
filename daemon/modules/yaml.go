@@ -57,6 +57,39 @@ type Tool struct {
 	BruteForceConfig BruteForceConfig   `yaml:"brute_force"`
 }
 
+func GenerateModuleCommand(module Tool, targetURL string) (CommandExecution, error) {
+	split := strings.Split(module.Cmd, " ")
+	if len(split) == 0 {
+		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
+	}
+
+	var output CommandExecution
+	args := make([]string, 0)
+	detectedScopePlaceholder := false
+	for i, s := range split {
+		if i == 0 {
+			output.command = s
+			continue
+		}
+
+		if s == TargetPlaceholder {
+			args = append(args, targetURL)
+			detectedScopePlaceholder = true
+			continue
+		}
+
+		args = append(args, s)
+	}
+
+	output.args = args
+
+	if !detectedScopePlaceholder {
+		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
+	}
+
+	return output, nil
+}
+
 func GeneratePortScanCmd(ports []string, target string) (CommandExecution, error) {
 	output := CommandExecution{
 		command: PortScanTool,

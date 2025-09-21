@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/caio-ishikawa/target-tracker/shared/models"
+	"github.com/caio-ishikawa/scopewarden/shared/models"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )

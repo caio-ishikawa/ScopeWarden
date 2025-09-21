@@ -3,22 +3,22 @@
     <img src="scopewarden.png" width=300 height=300>
 </div>
 
-## Introduction
+## 💻 Introduction
 ScopeWarden is a self-hostable and configurable automated recon tool. It allows you to automate your workflow without relying on any specific recon tool, and customize the way each scan runs. 
 
-## Features
+## ✨ Features
 - **Run any recon tool:** The yaml configuration file allows you to set any command for the scan to run, and a way to filter results such that only the relevant output gets considered.
 - **Run port scans on found assets:** Each found domain from the recon tool can be port scanned, and the configuration allows you to set specific ports to avoid collecting noise. Alternatively, it can run a complete port scan for each found domain.
-- **Conditional bruteforce**: Each tool can be configured to use a brute force tool (e.g. ffuf, gobuster, etc.), which can itself be configured to run based on the technologies found on the domain (e.g. php, wordpress, apache, etc.)
+- **Conditional brute force**: Each tool can be configured to use a brute force tool (e.g. ffuf, gobuster, etc.), which can itself be configured to run based on the technologies found on the domain (e.g. php, wordpress, apache, etc.)
 - **Update messages:** Can be configured to send Telegram messages if a new or previously unavailable domain/port becomes available.
 
-## Installation
+## 📦 Installation
 ### Daeomn/API
 TODO
 ### CLI
 TODO
 
-## Setup
+## 🚀 Setup
 ### Daemon & API
 The scan daemon and API will automatically start running if you installed it with `make install-daemon`.
 If you installed it via go install, follow these steps:
@@ -31,34 +31,34 @@ In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and
 - *Set up bot token:* https://core.telegram.org/bots/features#botfather
 - *To get your chat ID:* https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
 
-## Configuration
+## 🔧 Configuration
 By default, ScopeWarden will not run any tools in the scan. It will continuously loop trying to find the desired configuration yaml file.
 The yaml file can contain the folliwng:
 This configuration file defines global settings, tools, scanning options, and parsing rules for automated recon.
 
-### Global Settings
-- **schedule**: Interval in hours for running scans (e.g., `12` runs every 12 hours).  
-- **notify**: `true` or `false` — enable Telegram notifications.
+- **Global**
+    - **schedule**: Interval in hours for running scans (e.g., `12` runs every 12 hours).  
+    - **notify**: `true` or `false` — enable Telegram notifications.
 
-### Tools
-Each tool is defined under the `tools` section with the following fields:
-- **id**: Unique identifier for the tool (e.g., `gau`).  
-- **command**: CLI command to run. It supports the placeholder `<target>` for the target URL.  
-- **verbose**: `true` or `false`. Enables stderr logging for the tool.
+- **Tools**
+    Each tool is defined under the `tools` section with the following fields:
+    - **id**: Unique identifier for the tool (e.g., `gau`).  
+    - **command**: CLI command to run. It supports the placeholder `<target>` for the target URL.  
+    - **verbose**: `true` or `false`. Enables stderr logging for the tool.
 
-#### Port Scanning
-Optional port scanning configuration:
-- **run**: `true` or `false` — enable port scanning.  
-- **ports**: List of ports to scan. If empty/non-existing, ScopeWarden will run a port scan with no specified ports. (e.g., `21, 22, 53`).  
+- **Port Scan**
+    Optional port scanning configuration:
+    - **run**: `true` or `false` — enable port scanning.  
+    - **ports**: List of ports to scan. If empty/non-existing, ScopeWarden will run a port scan with no specified ports. (e.g., `21, 22, 53`).  
 
-#### Brute Force / Fuzzing
-Optional brute-force configuration:
-- **run**: `true` or `false` — enable brute force scans.  
-- **command**: The fuzzing command. It supports placeholders`<target>` for the target URL and `<wordlist>` representing the path of the worlist to use.  
-- **regex**: Regex to filter valid results from fuzzing output.
-- **conditions**: Optional list of technology-specific wordlists:
-  - **technology**: Target technology to run the scan. This is not case-sensitive. (e.g., `php`, `wordpress`).
-  - **wordlist**: Path to the wordlist to use for that technology.
+- **Brute Force**
+    Optional brute force configuration:
+    - **run**: `true` or `false` — enable brute force scans.  
+    - **command**: The fuzzing command. It supports placeholders`<target>` for the target URL and `<wordlist>` representing the path of the worlist to use.  
+    - **regex**: Regex to filter valid results from fuzzing output.
+    - **conditions**: Optional list of technology-specific wordlists:
+      - **technology**: Target technology to run the scan. This is not case-sensitive. (e.g., `php`, `wordpress`).
+      - **wordlist**: Path to the wordlist to use for that technology.
 
 #### Output Parser
 Defines how the tool output is processed:
@@ -96,7 +96,7 @@ tools:
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
 ```
 
-## Usage
+## 🎯 Usage
 ### CLI
 The CLI allows you to add targets and scopes, as well as view the recon results per target in a interactive table.
 #### Insert Target

@@ -1,4 +1,4 @@
-module github.com/caio-ishikawa/target-tracker
+module github.com/caio-ishikawa/scopewarden
 
 go 1.24.3
 
