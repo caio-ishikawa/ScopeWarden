@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="assets/scopewarden.png" width=300 height=300>
+    <img src="assets/scopewarden.png" width=250 height=250>
 </div>
 
 ## 💻 Introduction
@@ -12,23 +12,24 @@ ScopeWarden is a self-hostable and configurable automated recon tool. It allows 
 - **Update messages:** Can be configured to send Telegram messages if a new or previously unavailable domain/port becomes available.
 
 ## 📦 Setup & Installation
+#### Pre-installation Setup
 ScopeWarden expects some environment variables to be set before installing:
 - **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
 - **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
 - **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
 
-### Telegram Notifications
+#### Telegram Notifications Setup
 In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
 - **Set up bot token:** https://core.telegram.org/bots/features#botfather
 - **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
 
-### Installing Daeomn/API
+#### Installing Daeomn/API
 1. Clone the repository.
 2. In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
 3. If you want the daemon to run as a service in Linux, run `sudo make attach-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
 4. If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
 
-### Installing CLI
+#### Installing CLI
 1. Clone the repository
 2. In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
 3. Check installation with `scopewarden -h`.
