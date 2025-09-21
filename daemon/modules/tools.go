@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/caio-ishikawa/scopewarden/shared/models"
+	"io"
 	"log"
 	"os/exec"
 	"regexp"
@@ -52,10 +53,13 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 		log.Fatal(err)
 	}
 
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		log.Printf("Failed to run command %s: %s", command.command, err.Error())
-		return
+	var stderr io.ReadCloser
+	if tool.VerboseLogging || tool.BruteForceConfig.Regex == regex {
+		stderr, err = cmd.StderrPipe()
+		if err != nil {
+			log.Printf("Failed to run command %s: %s", command.command, err.Error())
+			return
+		}
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -70,6 +74,7 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 		defer wg.Done()
 		re := regexp.MustCompile(regex)
 		scanner := bufio.NewScanner(stdout)
+
 		for scanner.Scan() {
 			output := scanner.Text()
 			isURL := re.MatchString(output)
@@ -84,12 +89,10 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 			}
 
 			outputChan <- toolOutput
-
-			continue
 		}
 	}()
 
-	if tool.VerboseLogging {
+	if tool.VerboseLogging || tool.BruteForceConfig.Regex == regex {
 		go func() {
 			defer wg.Done()
 			scanner := bufio.NewScanner(stderr)
@@ -104,7 +107,6 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 	}
 
 	wg.Wait()
-	close(outputChan)
 }
 
 func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error) {
@@ -131,7 +133,11 @@ func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error)
 	return stdout.Bytes(), nil
 }
 
-func RunBruteForce(tool Tool, domain models.Domain, firstRun bool, technologies []string, outputChan chan ToolOutput) {
+func RunBruteForce(wg *sync.WaitGroup, sem chan struct{}, tool Tool, domain models.Domain, firstRun bool, technologies []string, outputChan chan ToolOutput) {
+	defer wg.Done()
+
+	sem <- struct{}{}
+	defer func() { <-sem }()
 
 	for _, tech := range technologies {
 		commandExecution, err := GenerateBruteForceCmd(tool.BruteForceConfig, domain.URL, tech)

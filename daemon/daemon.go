@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
@@ -165,17 +166,22 @@ func (a *Daemon) Stats() models.DaemonStats {
 	return a.stats
 }
 
-// Consume real-time output of a tool
+// Consumes real time output of a tool. Handles both URL outputs and the output of the brute force attempts. Since brute force attempts
+// can take some time, they are run concurrently and are limited to 5 processes. This function waits for the processing of the brute force
+// scans to finish before returning.
 func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.ToolOutput, target models.TargetTables, firstRun bool) {
-	httpClient := http.Client{
-		Timeout: 5 * time.Second,
-	}
+	var bruteForceWg sync.WaitGroup
 
-	// Generic input processing in case more tables are added later
 	for input := range inputChan {
 		switch table {
 		case models.DomainTable:
-			if err := a.processURLOutput(httpClient, input, firstRun, target); err != nil {
+			httpClient := http.Client{
+				Timeout: 5 * time.Second,
+			}
+
+			sem := make(chan struct{}, 5)
+
+			if err := a.processURLOutput(&bruteForceWg, sem, httpClient, input, firstRun, target); err != nil {
 				log.Println(err.Error())
 			}
 		case models.BruteforcedTable:
@@ -186,10 +192,15 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 			log.Printf("Failed to consume output: Invalid table %s", table)
 		}
 	}
+
+	// Wait for brute force attemtps to finish
+	bruteForceWg.Wait()
 }
 
 // Process URL output for a tool (parses, inserts/updates DB, notifies)
-func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables) error {
+func (a *Daemon) processURLOutput(
+	bruteForceWg *sync.WaitGroup, sem chan struct{}, httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables,
+) error {
 	parsed, err := url.Parse(input.Output)
 	if err != nil {
 		return fmt.Errorf("Failed to parse URL %s - SKIPPING", input.Output)
@@ -283,7 +294,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		}
 
 		a.portScan(input.Tool, toInsert, firstRun, target)
-		a.bruteForce(input.Tool, toInsert, firstRun, technologies)
+		a.bruteForce(bruteForceWg, sem, input.Tool, toInsert, firstRun, technologies)
 
 		return nil
 	}
@@ -315,7 +326,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		}
 
 		a.portScan(input.Tool, toInsert, firstRun, target)
-		a.bruteForce(input.Tool, toInsert, firstRun, technologies)
+		a.bruteForce(bruteForceWg, sem, input.Tool, toInsert, firstRun, technologies)
 	}
 
 	return nil
@@ -458,11 +469,15 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 }
 
 // Runs brute force command asynchronously
-func (a *Daemon) bruteForce(tool modules.Tool, domain models.Domain, firstRun bool, technologies []string) {
+func (a *Daemon) bruteForce(
+	wg *sync.WaitGroup, sem chan struct{}, tool modules.Tool, domain models.Domain, firstRun bool, technologies []string,
+) {
 	if tool.BruteForceConfig.Run {
+		wg.Add(1)
+
 		outputChan := make(chan modules.ToolOutput, 1000)
 		go a.ConsumeRealTime(models.BruteforcedTable, outputChan, domain, firstRun)
-		modules.RunBruteForce(tool, domain, firstRun, technologies, outputChan)
+		go modules.RunBruteForce(wg, sem, tool, domain, firstRun, technologies, outputChan)
 	}
 }
 

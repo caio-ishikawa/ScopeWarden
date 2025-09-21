@@ -17,13 +17,11 @@ tools:
         - 9092
     brute_force:
       run: true
-      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -rate 10'
-      regex: '^[^\/\r\n\\]+\.[^\/\r\n\\]+$'
+      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -fc 200 -rate 30'
+      regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
       conditions:
         - technology: 'php'
           wordlist: '/home/caio/offsec/resources/seclists/Discovery/Web-Content/Programming-Language-Specific/Common-PHP-Filenames.txt'
-        - technology: 'wordpress'
-          wordlist: ''
     parser:
       type: 'realtime'
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
