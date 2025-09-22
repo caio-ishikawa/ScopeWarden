@@ -260,7 +260,6 @@ func (a *Daemon) processURLOutput(
 
 	if existingDomain == nil {
 		foundDomain.UUID = uuid.NewString()
-
 		if err := a.insertNewFoundDomain(foundDomain, notification, firstRun); err != nil {
 			return err
 		}
@@ -285,8 +284,6 @@ func (a *Daemon) processURLOutput(
 }
 
 func (a *Daemon) insertNewFoundDomain(newDomain models.Domain, notification models.Notification, firstRun bool) error {
-	newDomain.UUID = uuid.NewString()
-
 	a.stats.TotalNewURLs += 1
 	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 		return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
