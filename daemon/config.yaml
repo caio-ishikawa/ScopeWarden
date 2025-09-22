@@ -17,7 +17,7 @@ tools:
         - 9092
     brute_force:
       run: true
-      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -fc 200 -rate 30'
+      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 30'
       regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
       conditions:
         - technology: 'php'

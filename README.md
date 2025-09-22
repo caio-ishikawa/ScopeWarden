@@ -140,6 +140,11 @@ I would especially welcome changes or suggestion towards these features:
     - **Web interface**: Add web interface as an alternative to the CLI.
 
 ## TODO
+- [x] Check if the found domain exists early instead of processing first
+- [x] Refactor daemon code for shorter parsing functions
+- [ ] Parallelize target scan. Set limit of maximum concurrent target scans, set mutex on daemon so the stats get updated correctly.
+- [ ] Fix tables - port and bruteforced do not display data anymore even though the DB does
+- [ ] Add amount of brute forced domains in domain table
 - [ ] Paginate bruteforce table in CLI
 - [ ] Have 'q' go back to main table instead of quitting the CLI from the ports/bruteforce table
 - [ ] Have 'c' copy the URL from the domain table

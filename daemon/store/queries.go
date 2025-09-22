@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS scope (
 CREATE TABLE IF NOT EXISTS domain (
 	uuid TEXT NOT NULL UNIQUE,
 	target_uuid TEXT NOT NULL,
+	scan_uuid TEXT NOT NULL,
 	url TEXT NOT NULL UNIQUE,
 	ip_address TEXT,
 	status_code INTEGER NOT NULL,

@@ -9,25 +9,21 @@ import (
 	"github.com/caio-ishikawa/scopewarden/daemon/store"
 	"github.com/caio-ishikawa/scopewarden/shared/models"
 	"github.com/google/uuid"
-	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
 
 type Daemon struct {
-	db       store.Database
-	api      api.API
-	telegram modules.TelegramClient
-	stats    models.DaemonStats
-	config   modules.DaemonConfig
+	db              store.Database
+	api             api.API
+	currentScanUUID string
+	telegram        modules.TelegramClient
+	stats           models.DaemonStats
+	config          modules.DaemonConfig
 }
 
 func NewDaemon() (Daemon, error) {
@@ -52,10 +48,11 @@ func NewDaemon() (Daemon, error) {
 	}
 
 	return Daemon{
-		db:       db,
-		api:      api,
-		telegram: telegram,
-		config:   config,
+		db:              db,
+		api:             api,
+		telegram:        telegram,
+		currentScanUUID: uuid.NewString(),
+		config:          config,
 		stats: models.DaemonStats{
 			TotalFoundURLs:  0,
 			TotalNewURLs:    0,
@@ -117,36 +114,7 @@ func (a *Daemon) RunDaemon() {
 		}
 
 		// Run scope scans
-		for _, scope := range scopes {
-			target, err := a.db.GetTarget(scope.TargetUUID)
-			if err != nil {
-				log.Printf("Failed to get target with UUID %s", scope.TargetUUID)
-				continue
-			}
-
-			if target == nil {
-				log.Printf("Failed to scan scope: Could not find target with UUID %s", scope.TargetUUID)
-				continue
-			}
-
-			// Set up output channel & run modules
-			outputChan := make(chan modules.ToolOutput, 1000)
-			go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope.FirstRun)
-			for _, tool := range a.config.Tools {
-				log.Printf("Running tool %s", tool.ID)
-
-				if err := modules.RunModule(tool, scope.URL, outputChan); err != nil {
-					log.Printf("Failed to run module %s: %s", tool.ID, err.Error())
-				}
-			}
-
-			// Set scope's first_run to false after intial scan
-			if scope.FirstRun == true {
-				newScope := scope
-				newScope.FirstRun = false
-				a.db.UpdateScope(newScope)
-			}
-		}
+		a.scanScopes(scopes)
 
 		// Reset stats when scan ends
 		log.Printf("Scan ended - duration: %s", a.stats.ScanTime.String())
@@ -156,6 +124,42 @@ func (a *Daemon) RunDaemon() {
 		a.stats.IsRunning = false
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 			log.Printf("%s", err.Error())
+		}
+
+		// Set new scan UUID
+		a.currentScanUUID = uuid.NewString()
+	}
+}
+
+func (a *Daemon) scanScopes(scopes []models.Scope) {
+	for _, scope := range scopes {
+		target, err := a.db.GetTarget(scope.TargetUUID)
+		if err != nil {
+			log.Printf("Failed to get target with UUID %s", scope.TargetUUID)
+			continue
+		}
+
+		if target == nil {
+			log.Printf("Failed to scan scope: Could not find target with UUID %s", scope.TargetUUID)
+			continue
+		}
+
+		// Set up output channel & run modules
+		outputChan := make(chan modules.ToolOutput, 1000)
+		go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope.FirstRun)
+		for _, tool := range a.config.Tools {
+			log.Printf("Running tool %s", tool.ID)
+
+			if err := modules.RunModule(tool, scope.URL, outputChan); err != nil {
+				log.Printf("Failed to run module %s: %s", tool.ID, err.Error())
+			}
+		}
+
+		// Set scope's first_run to false after intial scan
+		if scope.FirstRun == true {
+			newScope := scope
+			newScope.FirstRun = false
+			a.db.UpdateScope(newScope)
 		}
 	}
 }
@@ -201,54 +205,38 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 func (a *Daemon) processURLOutput(
 	bruteForceWg *sync.WaitGroup, sem chan struct{}, httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables,
 ) error {
-	parsed, err := url.Parse(input.Output)
+	baseURL, err := parseURL(input.Output)
 	if err != nil {
-		return fmt.Errorf("Failed to parse URL %s - SKIPPING", input.Output)
+		// Log and ignore invalid URLs
+		log.Println("Faile to parse URL: %s - SKIPPING", err.Error())
+		return nil
 	}
 
-	var baseURL string
-	if parsed.Scheme == "https" || parsed.Scheme == "http" {
-		baseURL = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
-	} else if parsed.Scheme == "" {
-		baseURL = parsed.Path
+	existingDomain, err := a.db.GetDomainByURL(baseURL)
+	if err != nil {
+		return fmt.Errorf("Failed to process URL: %w", err)
+	}
+
+	// Skip if domain was already processed in this scan
+	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
+		return nil
 	}
 
 	log.Printf("Processing URL %s", baseURL)
 
-	// Only send requests to base URL to avoid noise in DB
-	res, err := httpClient.Get(baseURL)
+	responseDetails, err := getResDetails(httpClient, baseURL)
 	if err != nil {
-		// Only process successful requests to avoid noise in DB
-		log.Printf("Failed to make request to URL %s: %s", baseURL, err.Error())
+		return err
+	}
+
+	// Ignore failed request
+	if !responseDetails.successful {
+		log.Printf("Failed to make request - SKIPPING")
 		return nil
 	}
-	defer res.Body.Close()
 
-	var statusCode int
-	if res == nil {
-		statusCode = 0
-	} else {
-		statusCode = res.StatusCode
-	}
-
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		return fmt.Errorf("Failed to read response body for %s: %w", baseURL, err)
-	}
-
-	wappalyzerClient, err := wappalyzer.New()
-	if err != nil {
-		return fmt.Errorf("Failed to start wappalyzer client: %w", err)
-	}
-
-	technologies := make([]string, 0)
-	fingerprints := wappalyzerClient.Fingerprint(res.Header, data)
-	for fingerprintKey := range fingerprints {
-		technologies = append(technologies, strings.ToLower(fingerprintKey))
-	}
-
-	if len(technologies) > 0 {
-		log.Printf("Found fingerprints for %s: %s", baseURL, strings.Join(technologies, ", "))
+	if len(responseDetails.technologies) > 0 {
+		log.Printf("Found fingerprints for %s: %s", baseURL, strings.Join(responseDetails.technologies, ", "))
 	}
 
 	// Increment found URLs
@@ -257,76 +245,84 @@ func (a *Daemon) processURLOutput(
 		return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
 	}
 
-	domain, err := a.db.GetDomainByURL(baseURL)
-	if err != nil {
-		return fmt.Errorf("Failed to process URL: %w", err)
-	}
-
 	notification := models.Notification{
 		TargetName: target.GetNotificationName(),
 		Type:       models.URLUpdate,
 		Content:    baseURL,
 	}
 
-	if domain == nil {
-		a.stats.TotalNewURLs += 1
-		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
+	foundDomain := models.Domain{
+		TargetUUID: target.GetUUID(),
+		ScanUUID:   a.currentScanUUID,
+		URL:        baseURL,
+		StatusCode: responseDetails.statusCode,
+	}
+
+	if existingDomain == nil {
+		foundDomain.UUID = uuid.NewString()
+
+		if err := a.insertNewFoundDomain(foundDomain, notification, firstRun); err != nil {
+			return err
 		}
 
-		toInsert := models.Domain{
-			UUID:       uuid.NewString(),
-			TargetUUID: target.GetUUID(),
-			URL:        baseURL,
-			IPAddress:  "", // TODO: This needs to be updated when running the port scanner
-			StatusCode: statusCode,
-		}
-
-		if err := a.db.InsertDomainRecord(toInsert); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
-		}
-
-		// Notify only if this is not the first run on the scope
-		if !firstRun && a.config.Global.Notify {
-			if err = a.telegram.SendMessage(notification); err != nil {
-				return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
-			}
-		}
-
-		a.portScan(input.Tool, toInsert, firstRun, target)
-		a.bruteForce(bruteForceWg, sem, input.Tool, toInsert, firstRun, technologies)
+		a.portScan(input.Tool, foundDomain, firstRun, target)
+		a.bruteForce(bruteForceWg, sem, input.Tool, foundDomain, firstRun, responseDetails.technologies)
 
 		return nil
 	}
 
 	// Update and notify if staus code has changed since last run
-	if domain.StatusCode != res.StatusCode || domain.StatusCode == 0 {
-		a.stats.TotalNewURLs += 1
-		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-			log.Printf("%s", err.Error())
+	if existingDomain.StatusCode != responseDetails.statusCode || existingDomain.StatusCode == 0 {
+		if err := a.updateExistingDomain(foundDomain, *existingDomain, notification); err != nil {
+			return err
 		}
 
-		toInsert := models.Domain{
-			UUID:        domain.UUID,
-			TargetUUID:  target.GetUUID(),
-			URL:         baseURL,
-			IPAddress:   domain.IPAddress,
-			StatusCode:  statusCode,
-			LastUpdated: time.Now().String(),
-		}
+		a.portScan(input.Tool, foundDomain, firstRun, target)
+		a.bruteForce(bruteForceWg, sem, input.Tool, foundDomain, firstRun, responseDetails.technologies)
+	}
 
-		if err := a.db.UpdateDomainRecord(toInsert); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
-		}
+	return nil
+}
 
-		if a.config.Global.Notify {
-			if err = a.telegram.SendMessage(notification); err != nil {
-				return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
-			}
-		}
+func (a *Daemon) insertNewFoundDomain(newDomain models.Domain, notification models.Notification, firstRun bool) error {
+	newDomain.UUID = uuid.NewString()
 
-		a.portScan(input.Tool, toInsert, firstRun, target)
-		a.bruteForce(bruteForceWg, sem, input.Tool, toInsert, firstRun, technologies)
+	a.stats.TotalNewURLs += 1
+	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+		return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+	}
+
+	if err := a.db.InsertDomainRecord(newDomain); err != nil {
+		return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+	}
+
+	// Notify only if this is not the first run on the scope
+	if !firstRun && a.config.Global.Notify {
+		if err := a.telegram.SendMessage(notification); err != nil {
+			return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+		}
+	}
+
+	return nil
+}
+
+func (a *Daemon) updateExistingDomain(newDomain models.Domain, existingDomain models.Domain, notification models.Notification) error {
+	a.stats.TotalNewURLs += 1
+	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+		log.Printf("%s", err.Error())
+	}
+
+	newDomain.UUID = existingDomain.UUID
+	newDomain.LastUpdated = time.Now().String()
+
+	if err := a.db.UpdateDomainRecord(newDomain); err != nil {
+		return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+	}
+
+	if a.config.Global.Notify {
+		if err := a.telegram.SendMessage(notification); err != nil {
+			return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+		}
 	}
 
 	return nil
@@ -362,59 +358,16 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 
 		log.Printf("Processing port %s for domain %s", scanner.Text(), domain.URL)
 
-		var port int
-		var proto models.Protocol
-		var state models.PortState
-
-		split := strings.Fields(scanner.Text())
-		for i, s := range split {
-			// Get port & protocol
-			if i == 0 {
-				portProtoSplit := strings.Split(s, "/")
-				if len(portProtoSplit) != 2 {
-					return fmt.Errorf("Failed to parse port and protocol from port scan result %s", s)
-				}
-
-				// Get port number
-				portInt, err := strconv.Atoi(strings.TrimSpace(portProtoSplit[0]))
-				if err != nil {
-					return fmt.Errorf("Failed to parse port number %s", portProtoSplit[0])
-				}
-				port = portInt
-
-				// Get port protocol
-				switch strings.TrimSpace(portProtoSplit[1]) {
-				case string(models.TCP):
-					proto = models.TCP
-				case string(models.UDP):
-					proto = models.UDP
-				case string(models.SCTP):
-					proto = models.SCTP
-				default:
-					return fmt.Errorf("Failed to parse port protocol %s", portProtoSplit[1])
-				}
-			}
-
-			// Get port state
-			if i == 1 {
-				switch strings.TrimSpace(s) {
-				case string(models.Open):
-					state = models.Open
-				case string(models.Filtered):
-					state = models.Filtered
-				case string(models.Closed):
-					state = models.Closed
-				default:
-					return fmt.Errorf("Failed to parse port state %s", s)
-				}
-			}
+		portData, err := parsePortScanLine(scanner.Text())
+		if err != nil {
+			return err
 		}
 
 		foundPort := models.Port{
 			DomainUUID:  domain.UUID,
-			Port:        port,
-			Protocol:    proto,
-			State:       state,
+			Port:        portData.portNum,
+			Protocol:    portData.portProtocol,
+			State:       portData.portState,
 			LastUpdated: time.Now().String(),
 		}
 

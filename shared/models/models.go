@@ -53,6 +53,7 @@ func (t Target) GetNotificationName() string {
 type Domain struct {
 	UUID        string `json:"uuid"`
 	TargetUUID  string `json:"target_uuid"`
+	ScanUUID    string `json:"scan_uuid"`
 	URL         string `json:"url"`
 	IPAddress   string `json:"ip_address"`
 	StatusCode  int    `json:"status_code"`

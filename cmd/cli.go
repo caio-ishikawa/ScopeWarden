@@ -71,10 +71,13 @@ const (
 )
 
 type CLI struct {
-	table      table.Model
-	offset     int
-	targetUUID string
-	state      CLIState
+	table             table.Model
+	selectedDomainURL string
+	selectedDomainIdx int
+	domainOffset      int
+	bruteForcedOffset int
+	targetUUID        string
+	state             CLIState
 }
 
 func (c *CLI) Init() tea.Cmd { return nil }
@@ -92,7 +95,7 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "l":
 			if c.state == TargetDomainTable {
-				c.offset = c.offset + tableLimit
+				c.domainOffset = c.domainOffset + tableLimit
 				rows, err := c.GetDomainRows()
 				if err != nil {
 					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
@@ -100,26 +103,75 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				c.table.SetRows(rows)
 			}
+			//if c.state == BruteForcedTable {
+			//	c.bruteForcedOffset = c.bruteForcedOffset + tableLimit
+
+			//	bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
+			//	if err != nil {
+			//		tea.Println("ERROR: COULD NOT GET BRUTE FORCED DOMAINS")
+			//		return c, tea.Quit
+			//	}
+
+			//	rows, err := c.GetBruteForcedRows(bruteForced)
+			//	if err != nil {
+			//		tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+			//		return c, tea.Quit
+			//	}
+
+			//	c.table.SetRows(rows)
+
+			//	c.selectedDomainIdx = 0
+			//}
 		case "h":
 			if c.state == TargetDomainTable {
-				if c.offset >= tableLimit {
-					c.offset = c.offset - tableLimit
-					tea.Println(c.offset)
+				if c.domainOffset >= tableLimit {
+					c.domainOffset = c.domainOffset - tableLimit
+
 					rows, err := c.GetDomainRows()
 					if err != nil {
 						tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
 						return c, tea.Quit
 					}
+
 					c.table.SetRows(rows)
+
+					c.selectedDomainIdx = 0
 				}
 			}
+			//if c.state == BruteForcedTable {
+			//	if c.bruteForcedOffset >= tableLimit {
+			//		c.bruteForcedOffset = c.bruteForcedOffset - tableLimit
+
+			//		bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
+			//		if err != nil {
+			//			tea.Println("ERROR: COULD NOT GET BRUTE FORCED DOMAINS")
+			//			return c, tea.Quit
+			//		}
+
+			//		rows, err := c.GetBruteForcedRows(bruteForced)
+			//		if err != nil {
+			//			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+			//			return c, tea.Quit
+			//		}
+
+			//		c.table.SetRows(rows)
+			//	}
+			//}
 		case "j":
 			if c.state == TargetDomainTable {
 				c.table.MoveDown(1)
+				c.selectedDomainURL = c.table.SelectedRow()[1]
+				if c.selectedDomainIdx < tableLimit {
+					c.selectedDomainIdx += 1
+				}
 			}
 		case "k":
 			if c.state == TargetDomainTable {
 				c.table.MoveUp(1)
+				c.selectedDomainURL = c.table.SelectedRow()[1]
+				if c.selectedDomainIdx > 0 {
+					c.selectedDomainIdx -= 1
+				}
 			}
 		case "p":
 			if c.state == TargetDomainTable {
@@ -147,7 +199,7 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "a":
 			if c.state == TargetDomainTable {
-				bruteForcedPaths, err := GetBruteForcedByDomain(c.table.SelectedRow()[1])
+				bruteForcedPaths, err := GetBruteForcedByDomain(c.table.SelectedRow()[1], c.bruteForcedOffset)
 				if err != nil {
 					tea.Printf("Failed to get bruteforced assets by domain: %s", err.Error())
 					return c, tea.Quit
@@ -221,8 +273,11 @@ func NewCLI() (CLI, error) {
 	t.SetStyles(s)
 
 	return CLI{
-		table:  t,
-		offset: 0,
+		table:             t,
+		domainOffset:      0,
+		bruteForcedOffset: 0,
+		selectedDomainURL: "",
+		selectedDomainIdx: 0,
 	}, nil
 }
 
@@ -285,7 +340,7 @@ func (c *CLI) RenderStatsTable() error {
 }
 
 func (c *CLI) GetDomainRows() ([]table.Row, error) {
-	domains, err := GetDomainsByTarget(c.targetUUID, c.offset)
+	domains, err := GetDomainsByTarget(c.targetUUID, c.domainOffset)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get domains rows: %w", err)
 	}
@@ -363,10 +418,11 @@ func GetPortsByDomain(domainURL string) ([]models.Port, error) {
 	return ret.Ports, nil
 }
 
-func GetBruteForcedByDomain(domainURL string) ([]models.BruteForced, error) {
+func GetBruteForcedByDomain(domainURL string, offset int) ([]models.BruteForced, error) {
 	param := url.Values{}
 	param.Add("domain_url", domainURL)
-	url := fmt.Sprintf("%s/bruteforced?%s", apiURL, param.Encode())
+
+	url := fmt.Sprintf("%s/bruteforced?%s&limit=%v&offset=%v", apiURL, param.Encode(), tableLimit, offset)
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("Could not get domains for domain %s: %w", domainURL, err)

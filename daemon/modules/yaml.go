@@ -150,7 +150,6 @@ func GenerateBruteForceCmd(bruteForceConfig BruteForceConfig, target string, tec
 	}
 
 	output.args = args
-	fmt.Printf("%s %s\n", output.command, strings.Join(output.args, " "))
 
 	return &output, nil
 }

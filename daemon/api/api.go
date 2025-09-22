@@ -223,15 +223,17 @@ func (a API) getPortsByDomain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Could not find domain by URL %s", domainURL), http.StatusNotFound)
 	}
 
-	scopes, err := a.db.GetPortByDomain(domain.UUID)
+	ports, err := a.db.GetPortByDomain(domain.UUID)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("Ports amount for domain %s: %v", domain.UUID, len(ports))
+
 	resStruct := models.PortListResponse{
-		Ports: scopes,
+		Ports: ports,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -257,6 +259,30 @@ func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	limitStr := query.Get("limit")
+	if limitStr == "" {
+		log.Println("no limit param")
+		http.Error(w, "No limit query parameter", http.StatusBadRequest)
+		return
+	}
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		log.Printf("Invalid limit parameter %s", limitStr)
+	}
+
+	offsetStr := query.Get("limit")
+	if offsetStr == "" {
+		log.Println("no offset param")
+		http.Error(w, "No offset query parameter", http.StatusBadRequest)
+		return
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		log.Printf("Invalid offset parameter %s", offsetStr)
+	}
+
 	domain, err := a.db.GetDomainByURL(domainURL)
 	if err != nil {
 		log.Println(err.Error())
@@ -269,7 +295,7 @@ func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request)
 		http.Error(w, errMsg, http.StatusNotFound)
 	}
 
-	bruteForcedPaths, err := a.db.GetBruteForcedByDomain(domain.UUID)
+	bruteForcedPaths, err := a.db.GetBruteForcedByDomain(domain.UUID, limit, offset)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)

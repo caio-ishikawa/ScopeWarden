@@ -97,7 +97,7 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 			defer wg.Done()
 			scanner := bufio.NewScanner(stderr)
 			for scanner.Scan() {
-				fmt.Println("[STDERR]", scanner.Text())
+				log.Println("[STDERR]", scanner.Text())
 			}
 		}()
 	}

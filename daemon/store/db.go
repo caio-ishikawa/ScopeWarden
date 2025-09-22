@@ -141,7 +141,7 @@ func (db Database) UpdateScope(scope models.Scope) error {
 }
 
 func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
-	query := fmt.Sprintf("SELECT uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+	query := fmt.Sprintf("SELECT uuid, scan_uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all domain: %w", err)
@@ -151,7 +151,7 @@ func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]m
 	var results []models.Domain
 	for rows.Next() {
 		var item models.Domain
-		if err := rows.Scan(&item.UUID, &item.URL, &item.StatusCode); err != nil {
+		if err := rows.Scan(&item.UUID, &item.ScanUUID, &item.URL, &item.StatusCode); err != nil {
 			return nil, fmt.Errorf("Failed to scan domain row: %w", err)
 		}
 
@@ -167,9 +167,10 @@ func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]m
 
 func (db Database) InsertDomainRecord(domain models.Domain) error {
 	if _, err := db.connection.Exec(
-		`INSERT INTO domain (uuid, target_uuid, url, status_code) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO domain (uuid, target_uuid, scan_uuid, url, status_code) VALUES (?, ?, ?, ?, ?)`,
 		domain.UUID,
 		domain.TargetUUID,
+		domain.ScanUUID,
 		domain.URL,
 		domain.StatusCode,
 	); err != nil {
@@ -181,7 +182,8 @@ func (db Database) InsertDomainRecord(domain models.Domain) error {
 
 func (db Database) UpdateDomainRecord(domain models.Domain) error {
 	if _, err := db.connection.Exec(
-		`UPDATE domain SET url = ?, status_code = ?, last_updated = ? WHERE uuid = ?`,
+		`UPDATE domain SET scan_uuid = ?, url = ?, status_code = ?, last_updated = ? WHERE uuid = ?`,
+		domain.ScanUUID,
 		domain.URL,
 		domain.StatusCode,
 		time.Now(),
@@ -211,8 +213,8 @@ func (db Database) GetTargetByName(name string) (*models.Target, error) {
 func (db Database) GetDomainByURL(url string) (*models.Domain, error) {
 	var domain models.Domain
 	err := db.connection.QueryRow(
-		`SELECT uuid, target_uuid, url, status_code, last_updated FROM domain WHERE url = ?`,
-		url).Scan(&domain.UUID, &domain.TargetUUID, &domain.URL, &domain.StatusCode, &domain.LastUpdated)
+		`SELECT uuid, target_uuid, scan_uuid, url, status_code, last_updated FROM domain WHERE url = ?`,
+		url).Scan(&domain.UUID, &domain.TargetUUID, &domain.ScanUUID, &domain.URL, &domain.StatusCode, &domain.LastUpdated)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -401,8 +403,11 @@ func (db Database) GetBruteForcedByPath(path string, domainUUID string) (*models
 	return &bruteForced, nil
 }
 
-func (db Database) GetBruteForcedByDomain(domainUUID string) ([]models.BruteForced, error) {
-	rows, err := db.connection.Query("SELECT uuid, domain_uuid, path, first_run, last_updated FROM bruteforced WHERE domain_uuid = ?", domainUUID)
+func (db Database) GetBruteForcedByDomain(domainUUID string, limit int, offset int) ([]models.BruteForced, error) {
+	//query := fmt.Sprintf("SELECT uuid, scan_uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+	query := fmt.Sprintf("SELECT uuid, domain_uuid, path, first_run, last_updated FROM bruteforced WHERE domain_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+	fmt.Println(query)
+	rows, err := db.connection.Query(query, domainUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all ports: %w", err)
 	}
@@ -442,12 +447,12 @@ func (db Database) InsertBruteForced(bruteForced models.BruteForced) error {
 
 func (db Database) UpdateBruteForced(bruteForced models.BruteForced) error {
 	if _, err := db.connection.Exec(
-		`UPDATE bruteforced SET uuid, domain_uuid, path, first_run, last_updated`,
-		bruteForced.UUID,
+		`UPDATE bruteforced SET domain_uuid = ?, path = ?, first_run = ?, last_updated = ? WHERE uuid = ?`,
 		bruteForced.DomainUUID,
 		bruteForced.Path,
 		bruteForced.FirstRun,
 		bruteForced.LastUpdated,
+		bruteForced.UUID,
 	); err != nil {
 		return fmt.Errorf("Failed to update bruteforced paths: %w", err)
 	}
