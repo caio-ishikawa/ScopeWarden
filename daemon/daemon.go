@@ -155,6 +155,9 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 			}
 		}
 
+		// Close output channel once all scans have finished
+		close(outputChan)
+
 		// Set scope's first_run to false after intial scan
 		if scope.FirstRun == true {
 			newScope := scope
@@ -208,7 +211,7 @@ func (a *Daemon) processURLOutput(
 	baseURL, err := parseURL(input.Output)
 	if err != nil {
 		// Log and ignore invalid URLs
-		log.Println("Faile to parse URL: %s - SKIPPING", err.Error())
+		log.Printf("Failed to parse URL: %s - SKIPPING", err.Error())
 		return nil
 	}
 
@@ -272,7 +275,10 @@ func (a *Daemon) processURLOutput(
 
 	// Update and notify if staus code has changed since last run
 	if existingDomain.StatusCode != responseDetails.statusCode || existingDomain.StatusCode == 0 {
-		if err := a.updateExistingDomain(foundDomain, *existingDomain, notification); err != nil {
+		foundDomain.UUID = existingDomain.UUID
+		foundDomain.LastUpdated = time.Now().String()
+
+		if err := a.updateExistingDomain(foundDomain, notification); err != nil {
 			return err
 		}
 
@@ -303,14 +309,11 @@ func (a *Daemon) insertNewFoundDomain(newDomain models.Domain, notification mode
 	return nil
 }
 
-func (a *Daemon) updateExistingDomain(newDomain models.Domain, existingDomain models.Domain, notification models.Notification) error {
+func (a *Daemon) updateExistingDomain(newDomain models.Domain, notification models.Notification) error {
 	a.stats.TotalNewURLs += 1
 	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 		log.Printf("%s", err.Error())
 	}
-
-	newDomain.UUID = existingDomain.UUID
-	newDomain.LastUpdated = time.Now().String()
 
 	if err := a.db.UpdateDomainRecord(newDomain); err != nil {
 		return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)

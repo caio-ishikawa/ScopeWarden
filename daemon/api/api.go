@@ -269,9 +269,10 @@ func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request)
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil {
 		log.Printf("Invalid limit parameter %s", limitStr)
+		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
 	}
 
-	offsetStr := query.Get("limit")
+	offsetStr := query.Get("offset")
 	if offsetStr == "" {
 		log.Println("no offset param")
 		http.Error(w, "No offset query parameter", http.StatusBadRequest)
@@ -281,6 +282,7 @@ func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request)
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
 		log.Printf("Invalid offset parameter %s", offsetStr)
+		http.Error(w, "Invalid offset parameter", http.StatusBadRequest)
 	}
 
 	domain, err := a.db.GetDomainByURL(domainURL)

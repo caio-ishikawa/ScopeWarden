@@ -140,18 +140,38 @@ func (db Database) UpdateScope(scope models.Scope) error {
 	return nil
 }
 
-func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]models.Domain, error) {
-	query := fmt.Sprintf("SELECT uuid, scan_uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
+func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]models.DomainWithCount, error) {
+	query := fmt.Sprintf(`
+	SELECT 
+		d.uuid,
+		d.scan_uuid,
+		d.url,
+		d.status_code,
+		COALESCE(p.cnt_ports, 0) AS count_ports,
+		COALESCE(b.cnt_bruteforced, 0) AS count_bruteforced
+	FROM domain d
+	LEFT JOIN (
+		SELECT domain_uuid, COUNT(*) AS cnt_ports
+		FROM port
+		GROUP BY domain_uuid
+	) p ON p.domain_uuid = d.uuid
+	LEFT JOIN (
+		SELECT domain_uuid, COUNT(*) AS cnt_bruteforced
+		FROM bruteforced
+		GROUP BY domain_uuid
+	) b ON b.domain_uuid = d.uuid
+	WHERE d.target_uuid = ? LIMIT %v OFFSET %v`, limit, offset)
+
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all domain: %w", err)
 	}
 	defer rows.Close()
 
-	var results []models.Domain
+	var results []models.DomainWithCount
 	for rows.Next() {
-		var item models.Domain
-		if err := rows.Scan(&item.UUID, &item.ScanUUID, &item.URL, &item.StatusCode); err != nil {
+		var item models.DomainWithCount
+		if err := rows.Scan(&item.UUID, &item.ScanUUID, &item.URL, &item.StatusCode, &item.PortCount, &item.BruteForcedCount); err != nil {
 			return nil, fmt.Errorf("Failed to scan domain row: %w", err)
 		}
 
@@ -404,9 +424,7 @@ func (db Database) GetBruteForcedByPath(path string, domainUUID string) (*models
 }
 
 func (db Database) GetBruteForcedByDomain(domainUUID string, limit int, offset int) ([]models.BruteForced, error) {
-	//query := fmt.Sprintf("SELECT uuid, scan_uuid, url, status_code FROM domain WHERE target_uuid = ? LIMIT %v OFFSET %v", limit, offset)
 	query := fmt.Sprintf("SELECT uuid, domain_uuid, path, first_run, last_updated FROM bruteforced WHERE domain_uuid = ? LIMIT %v OFFSET %v", limit, offset)
-	fmt.Println(query)
 	rows, err := db.connection.Query(query, domainUUID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all ports: %w", err)
@@ -428,6 +446,20 @@ func (db Database) GetBruteForcedByDomain(domainUUID string, limit int, offset i
 	}
 
 	return results, nil
+}
+
+func (db Database) GetBruteForcedCountByDomain(domainUUID string) (int, error) {
+
+	var count int
+	err := db.connection.QueryRow("SELECT COUNT(path) FROM bruteforced WHERE domain_uuid = ?", domainUUID).Scan(&count)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("Failed to get bruteforced count by domain: %w", err)
+	}
+
+	return count, nil
 }
 
 func (db Database) InsertBruteForced(bruteForced models.BruteForced) error {

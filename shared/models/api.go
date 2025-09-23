@@ -1,7 +1,20 @@
 package models
 
+type DomainWithCount struct {
+	UUID             string `json:"uuid"`
+	TargetUUID       string `json:"target_uuid"`
+	ScanUUID         string `json:"scan_uuid"`
+	URL              string `json:"url"`
+	IPAddress        string `json:"ip_address"`
+	StatusCode       int    `json:"status_code"`
+	FirstRun         bool   `json:"first_run"`
+	LastUpdated      string `json:"last_updated"`
+	PortCount        int    `json:"port_count"`
+	BruteForcedCount int    `json:"brute_forced_count"`
+}
+
 type DomainListResponse struct {
-	Domains []Domain `json:"domains"`
+	Domains []DomainWithCount `json:"domains"`
 }
 
 type ScopeListResponse struct {

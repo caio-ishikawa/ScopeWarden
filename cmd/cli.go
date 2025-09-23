@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -46,18 +47,19 @@ var (
 
 	URLColumns = []table.Column{
 		{Title: "STATUS", Width: 6},
-		{Title: "URL", Width: 139},
-		{Title: "QUERY PARAMS", Width: 20},
+		{Title: "PORTS", Width: 5},
+		{Title: "BRUTE", Width: 5},
+		{Title: "URL", Width: 70},
 	}
 
 	PortColumns = []table.Column{
 		{Title: "Port", Width: 10},
 		{Title: "Protocol", Width: 15},
-		{Title: "State", Width: 140},
+		{Title: "State", Width: 63},
 	}
 
 	BruteForcedColumns = []table.Column{
-		{Title: "Asset", Width: 169},
+		{Title: "Asset", Width: 92},
 	}
 )
 
@@ -72,6 +74,7 @@ const (
 
 type CLI struct {
 	table             table.Model
+	help              help.Model
 	selectedDomainURL string
 	selectedDomainIdx int
 	domainOffset      int
@@ -94,132 +97,28 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				c.table.Focus()
 			}
 		case "l":
-			if c.state == TargetDomainTable {
-				c.domainOffset = c.domainOffset + tableLimit
-				rows, err := c.GetDomainRows()
-				if err != nil {
-					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
-					return c, tea.Quit
-				}
-				c.table.SetRows(rows)
+			if m, c, skip := c.handleKeyL(); !skip {
+				return m, c
 			}
-			//if c.state == BruteForcedTable {
-			//	c.bruteForcedOffset = c.bruteForcedOffset + tableLimit
-
-			//	bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
-			//	if err != nil {
-			//		tea.Println("ERROR: COULD NOT GET BRUTE FORCED DOMAINS")
-			//		return c, tea.Quit
-			//	}
-
-			//	rows, err := c.GetBruteForcedRows(bruteForced)
-			//	if err != nil {
-			//		tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
-			//		return c, tea.Quit
-			//	}
-
-			//	c.table.SetRows(rows)
-
-			//	c.selectedDomainIdx = 0
-			//}
 		case "h":
-			if c.state == TargetDomainTable {
-				if c.domainOffset >= tableLimit {
-					c.domainOffset = c.domainOffset - tableLimit
-
-					rows, err := c.GetDomainRows()
-					if err != nil {
-						tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
-						return c, tea.Quit
-					}
-
-					c.table.SetRows(rows)
-
-					c.selectedDomainIdx = 0
-				}
+			if m, c, skip := c.handleKeyH(); !skip {
+				return m, c
 			}
-			//if c.state == BruteForcedTable {
-			//	if c.bruteForcedOffset >= tableLimit {
-			//		c.bruteForcedOffset = c.bruteForcedOffset - tableLimit
-
-			//		bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
-			//		if err != nil {
-			//			tea.Println("ERROR: COULD NOT GET BRUTE FORCED DOMAINS")
-			//			return c, tea.Quit
-			//		}
-
-			//		rows, err := c.GetBruteForcedRows(bruteForced)
-			//		if err != nil {
-			//			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
-			//			return c, tea.Quit
-			//		}
-
-			//		c.table.SetRows(rows)
-			//	}
-			//}
 		case "j":
-			if c.state == TargetDomainTable {
-				c.table.MoveDown(1)
-				c.selectedDomainURL = c.table.SelectedRow()[1]
-				if c.selectedDomainIdx < tableLimit {
-					c.selectedDomainIdx += 1
-				}
+			if m, c, skip := c.handleKeyJ(); !skip {
+				return m, c
 			}
 		case "k":
-			if c.state == TargetDomainTable {
-				c.table.MoveUp(1)
-				c.selectedDomainURL = c.table.SelectedRow()[1]
-				if c.selectedDomainIdx > 0 {
-					c.selectedDomainIdx -= 1
-				}
+			if m, c, skip := c.handleKeyK(); !skip {
+				return m, c
 			}
 		case "p":
-			if c.state == TargetDomainTable {
-				ports, err := GetPortsByDomain(c.table.SelectedRow()[1])
-				if err != nil {
-					tea.Printf("Failed to get ports by domain: %s", err.Error())
-					return c, tea.Quit
-				}
-
-				rows, err := c.GetPortRows(ports)
-				if err != nil {
-					tea.Printf("Failed to get rows and columns for ports: %s", err.Error())
-					return c, tea.Quit
-				}
-
-				if len(rows) == 0 {
-					break
-				}
-
-				c.state = PortsTable
-
-				// Render port table
-				c.table.SetColumns(PortColumns)
-				c.table.SetRows(rows)
+			if m, c, skip := c.handleKeyP(); !skip {
+				return m, c
 			}
 		case "a":
-			if c.state == TargetDomainTable {
-				bruteForcedPaths, err := GetBruteForcedByDomain(c.table.SelectedRow()[1], c.bruteForcedOffset)
-				if err != nil {
-					tea.Printf("Failed to get bruteforced assets by domain: %s", err.Error())
-					return c, tea.Quit
-				}
-
-				rows, err := c.GetBruteForcedRows(bruteForcedPaths)
-				if err != nil {
-					tea.Printf("Failed to get rows for bruteforced assets: %s", err.Error())
-					return c, tea.Quit
-				}
-
-				if len(rows) == 0 {
-					break
-				}
-
-				c.state = BruteForcedTable
-
-				// Render bruteforced table
-				c.table.SetRows(rows)
-				c.table.SetColumns(BruteForcedColumns)
+			if m, c, skip := c.handleKeyA(); !skip {
+				return m, c
 			}
 		case "b":
 			// Go back to URL table from other tables
@@ -235,15 +134,51 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Render the URL rows from previously recorded offset
 				c.table.SetColumns(URLColumns)
 				c.table.SetRows(rows)
+				c.table.SetCursor(c.selectedDomainIdx)
 			}
 
-		case "q", "ctrl+c":
+		case "q":
+			// Go back to URL table from other tables
+			if c.state == PortsTable || c.state == BruteForcedTable {
+				c.bruteForcedOffset = 0
+
+				rows, err := c.GetDomainRows()
+				if err != nil {
+					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+					return c, tea.Quit
+				}
+
+				c.state = TargetDomainTable
+
+				// Render the URL rows from previously recorded offset
+				c.table.SetColumns(URLColumns)
+				c.table.SetRows(rows)
+				c.table.SetCursor(c.selectedDomainIdx)
+			} else {
+				return c, tea.Quit
+			}
+		case "ctrl+c":
 			return c, tea.Quit
 		case "enter":
 			if c.state == TargetDomainTable {
-				cmd := exec.Command("xdg-open", c.table.SelectedRow()[1])
+				cmd := exec.Command("xdg-open", c.selectedDomainURL)
 				if err := cmd.Run(); err != nil {
-					tea.Printf("Failed to open domain %s", c.table.SelectedRow()[1])
+					tea.Printf("Failed to open domain %s", c.selectedDomainURL)
+				}
+			}
+			if c.state == BruteForcedTable {
+				bruteForced := c.table.SelectedRow()[0]
+				var cmd *exec.Cmd
+				if bruteForced[0] == '/' {
+					cmd = exec.Command("xdg-open", fmt.Sprintf("%s%s", c.selectedDomainURL, bruteForced))
+				} else if _, err := url.Parse(bruteForced); err != nil {
+					cmd = exec.Command("xdg-open", bruteForced)
+				} else {
+					cmd = exec.Command("xdg-open", fmt.Sprintf("%s/%s", c.selectedDomainURL, bruteForced))
+				}
+
+				if err := cmd.Run(); err != nil {
+					tea.Printf("Failed to open bruteforced %s", bruteForced)
 				}
 			}
 		}
@@ -271,9 +206,11 @@ func NewCLI() (CLI, error) {
 		Bold(true)
 
 	t.SetStyles(s)
+	t.SetHeight(tableHeightHalfScreen)
 
 	return CLI{
 		table:             t,
+		help:              help.New(),
 		domainOffset:      0,
 		bruteForcedOffset: 0,
 		selectedDomainURL: "",
@@ -300,9 +237,10 @@ func (c *CLI) RenderURLsTable() error {
 		return fmt.Errorf("Error getting domain rows: %w", err)
 	}
 
-	c.table.SetHeight(tableHeightHalfScreen)
 	c.table.SetColumns(URLColumns)
 	c.table.SetRows(rows)
+	c.table.SetCursor(0)
+	c.selectedDomainURL = c.table.SelectedRow()[3]
 
 	if _, err := tea.NewProgram(c).Run(); err != nil {
 		return fmt.Errorf("Error rendering stats table: %w", err)
@@ -347,7 +285,15 @@ func (c *CLI) GetDomainRows() ([]table.Row, error) {
 
 	var rows []table.Row
 	for _, domain := range domains {
-		rows = append(rows, table.Row{strconv.Itoa(domain.StatusCode), domain.URL})
+		rows = append(
+			rows,
+			table.Row{
+				strconv.Itoa(domain.StatusCode),
+				strconv.Itoa(domain.PortCount),
+				strconv.Itoa(domain.BruteForcedCount),
+				domain.URL,
+			},
+		)
 	}
 
 	return rows, nil
@@ -376,7 +322,7 @@ func (c *CLI) GetBruteForcedRows(assets []models.BruteForced) ([]table.Row, erro
 	return rows, nil
 }
 
-func GetDomainsByTarget(target string, offset int) ([]models.Domain, error) {
+func GetDomainsByTarget(target string, offset int) ([]models.DomainWithCount, error) {
 	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v", apiURL, target, tableLimit, offset)
 	res, err := http.Get(url)
 	if err != nil {
