@@ -17,13 +17,20 @@ import (
 	"time"
 )
 
+type ConcurrencySettings struct {
+	domainSemaphore     chan struct{}
+	bruteForceSemaphore chan struct{}
+	bruteForceWg        *sync.WaitGroup
+}
+
 type Daemon struct {
-	db              store.Database
-	api             api.API
-	currentScanUUID string
-	telegram        modules.TelegramClient
-	stats           models.DaemonStats
-	config          modules.DaemonConfig
+	db                  store.Database
+	api                 api.API
+	currentScanUUID     string
+	concurrencySettings ConcurrencySettings
+	telegram            modules.TelegramClient
+	stats               models.DaemonStats
+	config              modules.DaemonConfig
 }
 
 func NewDaemon() (Daemon, error) {
@@ -47,12 +54,20 @@ func NewDaemon() (Daemon, error) {
 		return Daemon{}, fmt.Errorf("Failed to create Daemon: %w", err)
 	}
 
+	var bruteForceWg sync.WaitGroup
+	concurrencySettings := ConcurrencySettings{
+		domainSemaphore:     make(chan struct{}, 30),
+		bruteForceSemaphore: make(chan struct{}, 10),
+		bruteForceWg:        &bruteForceWg,
+	}
+
 	return Daemon{
-		db:              db,
-		api:             api,
-		telegram:        telegram,
-		currentScanUUID: uuid.NewString(),
-		config:          config,
+		db:                  db,
+		api:                 api,
+		concurrencySettings: concurrencySettings,
+		telegram:            telegram,
+		currentScanUUID:     uuid.NewString(),
+		config:              config,
 		stats: models.DaemonStats{
 			TotalFoundURLs:  0,
 			TotalNewURLs:    0,
@@ -79,11 +94,11 @@ func (a *Daemon) RunDaemon() {
 		}
 		a.config = config
 
-		// Avoid running scan before timeout
-		if a.stats.LastScanEnded != nil {
-			if time.Since(*a.stats.LastScanEnded) < time.Duration(a.config.Global.Schedule)*time.Hour {
-				continue
-			}
+		// Do not scan unless it's been enough time since the last scan ended or if the last scan took longer than the schedule
+		if a.stats.LastScanEnded != nil &&
+			(time.Since(*a.stats.LastScanEnded) < time.Duration(a.config.Global.Schedule)*time.Hour ||
+				time.Since(a.stats.ScanBegin) < time.Duration(a.config.Global.Schedule)*time.Hour) {
+			continue
 		}
 
 		if a.stats.IsRunning {
@@ -115,6 +130,8 @@ func (a *Daemon) RunDaemon() {
 
 		// Run scope scans
 		a.scanScopes(scopes)
+		// Wait for brute force scans to end
+		//a.concurrencySettings.bruteForceWg.Wait()
 
 		// Reset stats when scan ends
 		log.Printf("Scan ended - duration: %s", a.stats.ScanTime.String())
@@ -177,20 +194,16 @@ func (a *Daemon) Stats() models.DaemonStats {
 // can take some time, they are run concurrently and are limited to 5 processes. This function waits for the processing of the brute force
 // scans to finish before returning.
 func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.ToolOutput, target models.TargetTables, firstRun bool) {
-	var bruteForceWg sync.WaitGroup
-
 	for input := range inputChan {
 		switch table {
 		case models.DomainTable:
+			a.concurrencySettings.domainSemaphore <- struct{}{}
+
 			httpClient := http.Client{
 				Timeout: 5 * time.Second,
 			}
 
-			sem := make(chan struct{}, 5)
-
-			if err := a.processURLOutput(&bruteForceWg, sem, httpClient, input, firstRun, target); err != nil {
-				log.Println(err.Error())
-			}
+			go a.processURLOutput(httpClient, input, firstRun, target)
 		case models.BruteforcedTable:
 			if err := a.processBruteForceResults(input, target, firstRun); err != nil {
 				log.Println(err.Error())
@@ -200,58 +213,56 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 		}
 	}
 
+	// TODO: maybe wait for the bruteforce in the RunDaemon() function to avoid blocking
 	// Wait for brute force attemtps to finish
-	bruteForceWg.Wait()
+	a.concurrencySettings.bruteForceWg.Wait()
+
+	// Attepmt to delete all unsuccessful domains found from previous scan
+	if err := a.db.DeleteUnsuccessfulDomains(); err != nil {
+		log.Printf("Failed to delete unsuccessful domains: %s", err.Error())
+	}
 }
 
 // Process URL output for a tool (parses, inserts/updates DB, notifies)
-func (a *Daemon) processURLOutput(
-	bruteForceWg *sync.WaitGroup, sem chan struct{}, httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables,
-) error {
+func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables) {
+	defer func() { <-a.concurrencySettings.domainSemaphore }()
+
 	baseURL, err := parseURL(input.Output)
 	if err != nil {
 		// Log and ignore invalid URLs
 		log.Printf("Failed to parse URL: %s - SKIPPING", err.Error())
-		return nil
+		return
 	}
 
-	existingDomain, err := a.db.GetDomainByURL(baseURL)
-	if err != nil {
-		return fmt.Errorf("Failed to process URL: %w", err)
-	}
-
-	// Skip if domain was already processed in this scan
-	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
-		return nil
-	}
-
-	log.Printf("Processing URL %s", baseURL)
-
-	responseDetails, err := getResDetails(httpClient, baseURL)
-	if err != nil {
-		return err
-	}
-
-	// Ignore failed request
-	if !responseDetails.successful {
-		log.Printf("Failed to make request - SKIPPING")
-		return nil
-	}
-
-	if len(responseDetails.technologies) > 0 {
-		log.Printf("Found fingerprints for %s: %s", baseURL, strings.Join(responseDetails.technologies, ", "))
-	}
-
-	// Increment found URLs
 	a.stats.TotalFoundURLs += 1
 	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-		return fmt.Errorf("Failed to process url %s: %w", baseURL, err)
+		log.Printf("Failed to update stats: %s", err.Error())
+		return
 	}
 
-	notification := models.Notification{
-		TargetName: target.GetNotificationName(),
-		Type:       models.URLUpdate,
-		Content:    baseURL,
+	// Check if domain exists early in the processing
+	existingDomain, err := a.db.GetDomainByURL(baseURL)
+	if err != nil {
+		log.Printf("Failed to get domain: %s", err.Error())
+		return
+	}
+
+	// Return early if domain was already processed in this scan
+	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
+		if existingDomain.StatusCode == 0 {
+			log.Printf("Already processed invalid domain %s - SKIPPING", baseURL)
+			return
+		}
+
+		log.Printf("Already processed URL %s - SKIPPING", baseURL)
+		return
+	}
+
+	// Make GET request and get fingerprinted technologies
+	responseDetails, err := getResDetails(httpClient, baseURL)
+	if err != nil {
+		log.Printf("Failed to get response for domain %s: %s", baseURL, err.Error())
+		return
 	}
 
 	foundDomain := models.Domain{
@@ -261,16 +272,43 @@ func (a *Daemon) processURLOutput(
 		StatusCode: responseDetails.statusCode,
 	}
 
+	if !responseDetails.successful {
+		// Insert domain where request was unsuccessful, so that next iterations can exit early if it already processed the domain in this scan
+		foundDomain.UUID = uuid.NewString()
+		if err := a.db.InsertDomainRecord(foundDomain); err != nil {
+			log.Printf("Failed to insert non-working domain %s: %s", baseURL, err.Error())
+			return
+		}
+
+		log.Printf("Failed to make request to domain %s - SKIPPING", baseURL)
+
+		// Return early if request was unsuccessful
+		return
+	}
+
+	log.Printf("Processing URL %s", baseURL)
+
+	if len(responseDetails.technologies) > 0 {
+		log.Printf("Found fingerprints for %s: %s", baseURL, strings.Join(responseDetails.technologies, ", "))
+	}
+
+	notification := models.Notification{
+		TargetName: target.GetNotificationName(),
+		Type:       models.URLUpdate,
+		Content:    baseURL,
+	}
+
 	if existingDomain == nil {
 		foundDomain.UUID = uuid.NewString()
 		if err := a.insertNewFoundDomain(foundDomain, notification, firstRun); err != nil {
-			return err
+			log.Printf("Failed to insert new domain: %s", err.Error())
+			return
 		}
 
 		a.portScan(input.Tool, foundDomain, firstRun, target)
-		a.bruteForce(bruteForceWg, sem, input.Tool, foundDomain, firstRun, responseDetails.technologies)
+		a.bruteForce(input.Tool, foundDomain, firstRun, responseDetails.technologies)
 
-		return nil
+		return
 	}
 
 	// Update and notify if staus code has changed since last run
@@ -279,14 +317,15 @@ func (a *Daemon) processURLOutput(
 		foundDomain.LastUpdated = time.Now().String()
 
 		if err := a.updateExistingDomain(foundDomain, notification); err != nil {
-			return err
+			log.Printf("Failed to update existing domain: %s", err.Error())
+			return
 		}
 
 		a.portScan(input.Tool, foundDomain, firstRun, target)
-		a.bruteForce(bruteForceWg, sem, input.Tool, foundDomain, firstRun, responseDetails.technologies)
+		a.bruteForce(input.Tool, foundDomain, firstRun, responseDetails.technologies)
 	}
 
-	return nil
+	return
 }
 
 func (a *Daemon) insertNewFoundDomain(newDomain models.Domain, notification models.Notification, firstRun bool) error {
@@ -356,6 +395,8 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 			continue
 		}
 
+		a.stats.TotalFoundPorts += 1
+
 		log.Printf("Processing port %s for domain %s", scanner.Text(), domain.URL)
 
 		portData, err := parsePortScanLine(scanner.Text())
@@ -388,6 +429,8 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 				continue
 			}
 
+			a.stats.TotalNewPorts += 1
+
 			// Update port changes & notify
 			foundPort.UUID = existingPort.UUID
 			if err := a.db.UpdatePort(foundPort); err != nil {
@@ -404,6 +447,8 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 			continue
 		}
 
+		a.stats.TotalNewPorts += 1
+
 		// Insert new port scan result
 		foundPort.UUID = uuid.NewString()
 		if err := a.db.InsertPort(foundPort); err != nil {
@@ -416,6 +461,11 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 				log.Printf("%s", err.Error())
 			}
 		}
+
+		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+			log.Printf("%s", err.Error())
+		}
+
 	}
 
 	return nil
@@ -423,14 +473,23 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 
 // Runs brute force command asynchronously
 func (a *Daemon) bruteForce(
-	wg *sync.WaitGroup, sem chan struct{}, tool modules.Tool, domain models.Domain, firstRun bool, technologies []string,
+	tool modules.Tool, domain models.Domain, firstRun bool, technologies []string,
 ) {
 	if tool.BruteForceConfig.Run {
-		wg.Add(1)
+		a.concurrencySettings.bruteForceWg.Add(1)
 
 		outputChan := make(chan modules.ToolOutput, 1000)
+
 		go a.ConsumeRealTime(models.BruteforcedTable, outputChan, domain, firstRun)
-		go modules.RunBruteForce(wg, sem, tool, domain, firstRun, technologies, outputChan)
+		go modules.RunBruteForce(
+			a.concurrencySettings.bruteForceWg,
+			a.concurrencySettings.bruteForceSemaphore,
+			tool,
+			domain,
+			firstRun,
+			technologies,
+			outputChan,
+		)
 	}
 }
 

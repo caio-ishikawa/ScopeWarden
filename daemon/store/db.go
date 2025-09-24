@@ -19,10 +19,13 @@ type TargetTable interface {
 }
 
 func Init() (Database, error) {
-	db, err := sql.Open("sqlite3", "./scopewarden.db")
+	db, err := sql.Open("sqlite3", "./scopewarden.db?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return Database{}, fmt.Errorf("Failed to start DB connection: %w", err)
 	}
+
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	// Create tables on startup
 	if _, err := db.Exec(createTablesQuery); err != nil {
@@ -160,7 +163,7 @@ func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]m
 		FROM bruteforced
 		GROUP BY domain_uuid
 	) b ON b.domain_uuid = d.uuid
-	WHERE d.target_uuid = ? LIMIT %v OFFSET %v`, limit, offset)
+	WHERE d.target_uuid = ? AND d.status_code != 0 LIMIT %v OFFSET %v`, limit, offset)
 
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
@@ -193,6 +196,17 @@ func (db Database) InsertDomainRecord(domain models.Domain) error {
 		domain.ScanUUID,
 		domain.URL,
 		domain.StatusCode,
+	); err != nil {
+		return fmt.Errorf("Failed to insert domain: %w", err)
+	}
+
+	return nil
+}
+
+// Delete all records from domains where status code represents an unsuccessful request
+func (db Database) DeleteUnsuccessfulDomains() error {
+	if _, err := db.connection.Exec(
+		`DELETE FROM domain WHERE status_code = 0`,
 	); err != nil {
 		return fmt.Errorf("Failed to insert domain: %w", err)
 	}

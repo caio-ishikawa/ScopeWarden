@@ -156,4 +156,6 @@ func RunBruteForce(wg *sync.WaitGroup, sem chan struct{}, tool Tool, domain mode
 		// Run brute force asynchronously
 		runCmdAsync(tool, tool.BruteForceConfig.Regex, *commandExecution, outputChan)
 	}
+
+	close(outputChan)
 }

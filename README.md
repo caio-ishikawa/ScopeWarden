@@ -3,7 +3,7 @@
 </div>
 
 ## 💻 Introduction
-ScopeWarden is a self-hostable and configurable automated recon tool. It allows you to automate your workflow without relying on any specific recon tool, and customize the way each scan runs. 
+ScopeWarden is a self-hostable and configurable automated recon tool. It allows for flexible automation of recon workflows without relying on any specific tool.
 
 ## ✨ Features
 - **Run any recon tool:** The yaml configuration file allows you to set any command for the scan to run, and a way to filter results such that only the relevant output gets considered.
@@ -12,14 +12,12 @@ ScopeWarden is a self-hostable and configurable automated recon tool. It allows 
 - **Update messages:** Can be configured to send Telegram messages if a new or previously unavailable domain/port becomes available.
 
 ## 📦 Setup & Installation
-- **Pre-installation Setup**
-    ScopeWarden expects some environment variables to be set before installing:
+- **Pre-installation Setup:** ScopeWarden expects some environment variables to be set before installing:
     - **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
     - **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
     - **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
 
-- **Telegram Notifications Setup**
-    In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
+- **Telegram Notifications Setup:** In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
     - **Set up bot token:** https://core.telegram.org/bots/features#botfather
     - **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
 
@@ -34,66 +32,76 @@ ScopeWarden is a self-hostable and configurable automated recon tool. It allows 
     2. In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
     3. Check installation with `scopewarden -h`.
 
+## 🖥️ Dependencies
+- [Golang](https://go.dev/)
+- [SQLite](https://sqlite.org/)
+- [Nmap](https://nmap.org/): Not necessary if ScopeWarden is not configured to do automated port scans.
+- A cool terminal theme 😎
+
+## ❓ How it works
+ScopeWarden works with targets, scopes and domains:
+- **Targets:** Consist of a unique name.
+- **Scope:** Represents all the scannable URLs for a specific target. A scope can only be related to a single target.
+- **Domains:** Represent all the domains found when scanning a particular scope. The subsequent port scans and brute forcing are done to each domain, as configured in the yaml file.
+
+A scan will start by going over the targets and its scopes. For each scope found, it will run the scan based on the configured toolset (see [Configuration](#Configuration)), and update the DB.
+
 ## 🔧 Configuration
 By default, ScopeWarden will not run any tools in the scan. It will continuously loop trying to find the desired configuration yaml file.
 The yaml file can contain the folliwng:
+#### Global
+- **schedule**: Interval in hours for running scans (e.g., `12` runs every 12 hours). If the previous scan took longer than the set schedule , it will run again after it is completed.
+- **notify**: `true` or `false`. Enables Telegram notifications.
+- **Intensity:** `aggressive` or `conservative`. Aggressive will use a maximum of 30 concurrent processes to parse domains and 15 concurrent processes to conduct the brute force. Conservative will use 10 and 5 respectively. This field is set to `conservative` by default.
 
-This configuration file defines global settings, tools, scanning options, and parsing rules for automated recon.
-- **Global**
-    - **schedule**: Interval in hours for running scans (e.g., `12` runs every 12 hours).  
-    - **notify**: `true` or `false` — enable Telegram notifications.
+#### Tools
+Multiple tools are allowed to be configured under the `tools` section, each with the following configurations:
+- **id (required):** Unique name for the tool.  
+- **command (required):** CLI command to run. It supports the placeholder `<target>` that gets replaced with the scope in the current scan.  
+- **verbose (optional):** `true` or `false`. Enables stderr logging for the tool. Defaults to false if not set.
 
-- **Tools**
-    Each tool is defined under the `tools` section with the following fields:
-    - **id**: Unique identifier for the tool (e.g., `gau`).  
-    - **command**: CLI command to run. It supports the placeholder `<target>` for the target URL.  
-    - **verbose**: `true` or `false`. Enables stderr logging for the tool.
+- **Output Parser:** Configuration to define how the tool's output gets processed. **Note:** The configured regex will match against all the outputs of a tool. The found match will be tested by means of a GET request, and fingerprinted based on the response. If a specific tool outputs more than the found URL in the same line, it is recommended to pipe the output of the tool to `awk` or similar, such that the tool only the desired outputs that can be matched with the regex.
+    - **type (required)**: Currently only supports `realtime` option (parse output as it is produced).  
+    - **regex (required)**: Regular expression to extract relevant information from the tool output. 
 
-    - **Port Scan**
-        Optional port scanning configuration:
-        - **run**: `true` or `false` — enable port scanning.  
-        - **ports**: List of ports to scan. If empty/non-existing, ScopeWarden will run a port scan with no specified ports. (e.g., `21, 22, 53`).  
+- **Port Scan:** Configuration to define the automated port scan parameters. 
+    - **run (optional):** `true` or `false`. Enables port scan for each found domain. Defaults to `false` if not set.
+    - **ports (optional):** List of ports to scan (e.g., `21, 22, 53`). If empty or not set, ScopeWarden will run a port scan with no specified ports.   
 
-    - **Brute Force**
-        Optional brute force configuration:
-        - **run**: `true` or `false` — enable brute force scans.  
-        - **command**: The fuzzing command. It supports placeholders`<target>` for the target URL and `<wordlist>` representing the path of the worlist to use.  
-        - **regex**: Regex to filter valid results from fuzzing output.
-        - **conditions**: Optional list of technology-specific wordlists. Will run the brute force command for **every found domain** if empty or non-existant:
-          - **technology**: Target technology to run the scan. This is not case-sensitive. (e.g., `php`, `wordpress`).
-          - **wordlist**: Path to the wordlist to use for that technology. Expects absolute path.
+- **Brute Force:** Brute force attempts are conducted to found domains in the scan, and can be configured to do so conditionally depending on the technologies fingerprinted on the domain. **Note:** Even though brute forces happen concurrently, it is **heavily** encouraged to use smaller/more focused wordlists to keep the scan from taking too long.
+    - **run (optional):** `true` or `false`. Enables brute force scans. Defaults to false if not set. 
+    - **command (required):** The fuzzing command. It supports placeholders `<target>` and `<wordlist>` that get replaced with the domain URL in the current scan and the worlist configured in the **conditions** field.  
+    - **regex (required):** Regex to filter valid results from fuzzing output.
+    - **conditions (required):** Optional list of technology-specific wordlists. If empty or not set, this will run the brute force command for **every found domain**:
+      - **technology (required):** Non-case-sensitive target technology to run the scan (e.g., `php`, `wordpress`). If none is set, the brute force scan will be conducted to **every found domain in the scan (not recommended)**.
+      - **wordlist (required):** Path to the wordlist to use for that technology. Expects absolute path.
 
-    - **Output Parser**
-        Defines how the tool output is processed:
-        - **type**: Currently only supports `realtime` option (parse output as it is produced).  
-        - **regex**: Regular expression to extract relevant information from the tool output.  
-
-- **Example**
+#### Example Configuration
     ```
-    yaml
     global:
       schedule: 12
-      notify: true
+      nofity: true
 
     tools:
       - id: gau
         command: 'gau <target>'
-        table: 'domain'
-        target_table: 'scope'
-        verbose: false
+        verbose: false 
         port_scan:
           run: true
           ports:
             - 21
             - 22
             - 53
+            - 5432
+            - 3306
+            - 9092
         brute_force:
           run: true
-          command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -rate 5'
-          regex: '^[^\/\r\n\\]+\.[^\/\r\n\\]+$'
+          command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 30'
+          regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
           conditions:
             - technology: 'php'
-              wordlist: '/path/to/php-wordlist.txt'
+              wordlist: 'absolute/path/to/php/wordlist.txt'
         parser:
           type: 'realtime'
           regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
@@ -135,19 +143,19 @@ The first table displayed when running -t is the domains table. It shows all dom
 ## Contributing
 Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remember to update the README in the PR when a change requires it.
 
-I would especially welcome changes or suggestion towards these features:
-- **Allow file output parser for tool:** Add parser type 'file' which parses tool output file instead of the real time output in stdout.
+I would especially welcome changes towards these features:
+- **Allow file output parser for tool:** Add output parser type called 'file' which parses tool output file instead of the real time output in stdout. Ideally it would set the output path to `/tmp` and delete it after processing.
 - **Web interface**: Add web interface as an alternative to the CLI.
 
 ## TODO
 - [x] Check if the found domain exists early instead of processing first
 - [x] Refactor daemon code for shorter parsing functions
+- [ ] Add aggressive/conservative global option (aggressive uses 30 on the url semaphore and 15 on the brute force one; conservative uses 10 and 5)
+- [ ] Wait for brute force domains after running scanScopes(), to avoid blocking the URL processing
 - [ ] Parallelize target scan. Set limit of maximum concurrent target scans, set mutex on daemon so the stats get updated correctly.
 - [x] Fix tables - port and bruteforced do not display data anymore even though the DB does
 - [x] Add amount of brute forced domains in domain table
 - [x] Paginate bruteforce table in CLI
 - [x] Have 'q' go back to main table instead of quitting the CLI from the ports/bruteforce table
-- [ ] Have 'c' copy the URL from the domain table
 - [x] Have 'Enter' go to the domain URL in main table and to the bruteforced path in the bruteforce table
-- [ ] Add helper line in the bottom of the table with all available buttons/interactions
 - [ ] Test Makefile installation

@@ -40,6 +40,7 @@ func parseURL(urlStr string) (string, error) {
 	return baseURL, nil
 }
 
+// Only returns error if request fails
 func getResDetails(httpClient http.Client, url string) (ResponseDetails, error) {
 	res, err := httpClient.Get(url)
 	if err != nil {
@@ -56,12 +57,20 @@ func getResDetails(httpClient http.Client, url string) (ResponseDetails, error) 
 
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
-		return ResponseDetails{}, fmt.Errorf("Failed to read response body for %s: %w", url, err)
+		return ResponseDetails{
+			successful:   true,
+			technologies: []string{},
+			statusCode:   statusCode,
+		}, nil
 	}
 
 	wappalyzerClient, err := wappalyzer.New()
 	if err != nil {
-		return ResponseDetails{}, fmt.Errorf("Failed to start wappalyzer client: %w", err)
+		return ResponseDetails{
+			successful:   true,
+			technologies: []string{},
+			statusCode:   statusCode,
+		}, nil
 	}
 
 	technologies := make([]string, 0)
