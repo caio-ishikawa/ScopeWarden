@@ -102,6 +102,36 @@ func (a API) getTargetByName(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a API) enableDisableTarget(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+	targetName := query.Get("name")
+	if targetName == "" {
+		http.Error(w, "No target name", http.StatusBadRequest)
+		return
+	}
+
+	enabled := query.Get("enable_disable")
+	if enabled == "" {
+		http.Error(w, "No enabled", http.StatusBadRequest)
+		return
+	}
+
+	enabledBool, err := strconv.ParseBool(enabled)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not convert %s to boolean", enabled), http.StatusBadRequest)
+		return
+	}
+
+	if err := a.db.UpdateTargetEnabled(targetName, enabledBool); err != nil {
+		log.Printf("Failed to disable target")
+	}
+}
+
 func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -155,15 +185,16 @@ func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 	scopeUUID := uuid.NewString()
 
 	scope := models.Scope{
-		UUID:             scopeUUID,
-		TargetUUID:       target.UUID,
-		URL:              req.URL,
-		AcceptSubdomains: req.AcceptSubdomains,
-		FirstRun:         true,
+		UUID:       scopeUUID,
+		TargetUUID: target.UUID,
+		URL:        req.URL,
+		FirstRun:   true,
 	}
 
 	if err = a.db.InsertScope(scope); err != nil {
+		log.Printf("Failed to insert scope: %s", err.Error())
 		http.Error(w, "Failed to insert scope", http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusCreated)

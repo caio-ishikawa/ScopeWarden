@@ -44,7 +44,7 @@ ScopeWarden works with targets, scopes and domains:
 - **Scope:** Represents all the scannable URLs for a specific target. A scope can only be related to a single target.
 - **Domains:** Represent all the domains found when scanning a particular scope. The subsequent port scans and brute forcing are done to each domain, as configured in the yaml file.
 
-A scan will start by going over the targets and its scopes. For each scope found, it will run the scan based on the configured toolset (see [Configuration](#Configuration)), and update the DB.
+A scan will start by going over the targets and its scopes. For each scope found, it will run the scan based on the configured toolset (see [Configuration](#Configuration)), and update the DB with the found domains and the associated brute forced paths and found ports. **NOTE:** In order to avoid a lot of noise in the DB, ScopeWarden will only store and process the root URL. E.g. If the configured tool finds `https://example.com/some/path/to/something`, ScopeWarden will only process `https://example.com`. The rationale behind this is that tools often return multiple paths to the same root URL, and most times these paths are not relevant, and will end up making the end results harder to parse through. This also speeds up the scanning by ignoring duplicate root URLs before processing them.
 
 ## 🔧 Configuration
 By default, ScopeWarden will not run any tools in the scan. It will continuously loop trying to find the desired configuration yaml file.
@@ -52,7 +52,7 @@ The yaml file can contain the folliwng:
 #### Global
 - **schedule**: Interval in hours for running scans (e.g., `12` runs every 12 hours). If the previous scan took longer than the set schedule , it will run again after it is completed.
 - **notify**: `true` or `false`. Enables Telegram notifications.
-- **Intensity:** `aggressive` or `conservative`. Aggressive will use a maximum of 30 concurrent processes to parse domains and 15 concurrent processes to conduct the brute force. Conservative will use 10 and 5 respectively. This field is set to `conservative` by default.
+- **Intensity:** `aggressive` or `conservative`. Aggressive will use a maximum of 30 concurrent processes to parse domains and 15 concurrent processes to conduct the brute force. Conservative will use 10 and 5 respectively. This field defaults to `conservative`.
 
 #### Tools
 Multiple tools are allowed to be configured under the `tools` section, each with the following configurations:
@@ -110,18 +110,25 @@ Multiple tools are allowed to be configured under the `tools` section, each with
 ## 🎯 CLI Usage
 The CLI allows you to add targets and scopes, as well as view the recon results per target in a interactive table.
 ```
+  -dT string
+        Disable target (<target_name>)
   -iS string
-        Comma-separated values for scope. First value should be target name, the second should be a boolean value representing the accept_subdomain field, and the followingvalues will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>)
+        Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>)
   -iT string
         Insert target (<target_name>)
   -s    Show stats
   -t string
         Show target stats based on target name (<target_name>)
 ```
+
 #### Examples 
 - Add target:
     ```
     scopewarden -iT NASA
+    ```
+- Disable target:
+    ```
+    scopewarden -dT NASA
     ```
 - Add scope for target:
     ```
@@ -130,6 +137,10 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
 - View table for target:
     ```
     scopewarden -t NASA
+    ```
+- View scanning daemon stats:
+    ```
+    scopewarden -s
     ```
 
 #### Navigating interactive table:
@@ -150,12 +161,15 @@ I would especially welcome changes towards these features:
 ## TODO
 - [x] Check if the found domain exists early instead of processing first
 - [x] Refactor daemon code for shorter parsing functions
-- [ ] Add aggressive/conservative global option (aggressive uses 30 on the url semaphore and 15 on the brute force one; conservative uses 10 and 5)
-- [ ] Wait for brute force domains after running scanScopes(), to avoid blocking the URL processing
-- [ ] Parallelize target scan. Set limit of maximum concurrent target scans, set mutex on daemon so the stats get updated correctly.
+- [x] Add aggressive/conservative global option (aggressive uses 30 on the url semaphore and 15 on the brute force one; conservative uses 10 and 5)
+- [x] Wait for brute force domains after running scanScopes(), to avoid blocking the URL processing
+- [x] Add enable/disable for scopes.
+- [x] Add command to enabe/disable/delete scopes
 - [x] Fix tables - port and bruteforced do not display data anymore even though the DB does
 - [x] Add amount of brute forced domains in domain table
 - [x] Paginate bruteforce table in CLI
 - [x] Have 'q' go back to main table instead of quitting the CLI from the ports/bruteforce table
 - [x] Have 'Enter' go to the domain URL in main table and to the bruteforced path in the bruteforce table
 - [ ] Test Makefile installation
+- [ ] Show total pages in domains table
+- [ ] Copy domain using 'c' 

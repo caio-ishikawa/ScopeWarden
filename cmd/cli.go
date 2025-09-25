@@ -7,7 +7,6 @@ import (
 	"github.com/caio-ishikawa/scopewarden/shared/models"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"strconv"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -121,65 +120,18 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, c
 			}
 		case "b":
-			// Go back to URL table from other tables
-			if c.state == PortsTable || c.state == BruteForcedTable {
-				rows, err := c.GetDomainRows()
-				if err != nil {
-					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
-					return c, tea.Quit
-				}
-
-				c.state = TargetDomainTable
-
-				// Render the URL rows from previously recorded offset
-				c.table.SetColumns(URLColumns)
-				c.table.SetRows(rows)
-				c.table.SetCursor(c.selectedDomainIdx)
+			if m, c, skip := c.handleKeyB(); !skip {
+				return m, c
 			}
-
 		case "q":
-			// Go back to URL table from other tables
-			if c.state == PortsTable || c.state == BruteForcedTable {
-				c.bruteForcedOffset = 0
-
-				rows, err := c.GetDomainRows()
-				if err != nil {
-					tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
-					return c, tea.Quit
-				}
-
-				c.state = TargetDomainTable
-
-				// Render the URL rows from previously recorded offset
-				c.table.SetColumns(URLColumns)
-				c.table.SetRows(rows)
-				c.table.SetCursor(c.selectedDomainIdx)
-			} else {
-				return c, tea.Quit
+			if m, c, skip := c.handleKeyQ(); !skip {
+				return m, c
 			}
 		case "ctrl+c":
 			return c, tea.Quit
 		case "enter":
-			if c.state == TargetDomainTable {
-				cmd := exec.Command("xdg-open", c.selectedDomainURL)
-				if err := cmd.Run(); err != nil {
-					tea.Printf("Failed to open domain %s", c.selectedDomainURL)
-				}
-			}
-			if c.state == BruteForcedTable {
-				bruteForced := c.table.SelectedRow()[0]
-				var cmd *exec.Cmd
-				if bruteForced[0] == '/' {
-					cmd = exec.Command("xdg-open", fmt.Sprintf("%s%s", c.selectedDomainURL, bruteForced))
-				} else if _, err := url.Parse(bruteForced); err != nil {
-					cmd = exec.Command("xdg-open", bruteForced)
-				} else {
-					cmd = exec.Command("xdg-open", fmt.Sprintf("%s/%s", c.selectedDomainURL, bruteForced))
-				}
-
-				if err := cmd.Run(); err != nil {
-					tea.Printf("Failed to open bruteforced %s", bruteForced)
-				}
+			if m, c, skip := c.handleKeyEnter(); !skip {
+				return m, c
 			}
 		}
 	}
@@ -428,9 +380,8 @@ func GetStats() (models.StatsResponse, error) {
 func InsertScope(scopes ScopeInsert) error {
 	for _, scopeURL := range scopes.ScopeURLs {
 		reqBody := models.InsertScopeRequest{
-			TargetName:       scopes.TargetName,
-			URL:              scopeURL,
-			AcceptSubdomains: scopes.AcceptSubdomains,
+			TargetName: scopes.TargetName,
+			URL:        scopeURL,
 		}
 
 		body, err := json.Marshal(&reqBody)
@@ -452,6 +403,28 @@ func InsertScope(scopes ScopeInsert) error {
 }
 
 func InsertTarget(target string) error {
+	reqBody := models.InsertTargetRequest{
+		Name: target,
+	}
+
+	body, err := json.Marshal(&reqBody)
+	if err != nil {
+		return fmt.Errorf("Failed to marshal scope request body: %w", err)
+	}
+
+	res, err := http.Post(fmt.Sprintf("%s/insert_target", apiURL), "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("Could not insert target: %w", err)
+	}
+
+	if res.StatusCode != http.StatusCreated {
+		return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+	}
+
+	return nil
+}
+
+func DisableTarget(target string) error {
 	reqBody := models.InsertTargetRequest{
 		Name: target,
 	}

@@ -39,11 +39,6 @@ func NewDaemon() (Daemon, error) {
 		return Daemon{}, fmt.Errorf("Failed to start DB client: %w", err)
 	}
 
-	telegram, err := modules.NewTelegramClient()
-	if err != nil {
-		return Daemon{}, fmt.Errorf("Failed to start Telegram client: %w", err)
-	}
-
 	api, err := api.NewAPI()
 	if err != nil {
 		return Daemon{}, fmt.Errorf("Failed to create API: %w", err)
@@ -54,10 +49,25 @@ func NewDaemon() (Daemon, error) {
 		return Daemon{}, fmt.Errorf("Failed to create Daemon: %w", err)
 	}
 
+	var telegram modules.TelegramClient
+	if config.Global.Notify {
+		telegram, err = modules.NewTelegramClient()
+		if err != nil {
+			return Daemon{}, fmt.Errorf("Failed to start Telegram client: %w", err)
+		}
+	}
+
+	maxConcurrentDomainProcessing := 10
+	maxConcurrentBruteForces := 5
+	if config.Global.Intensity == modules.Aggressive {
+		maxConcurrentDomainProcessing = 30
+		maxConcurrentBruteForces = 10
+	}
+
 	var bruteForceWg sync.WaitGroup
 	concurrencySettings := ConcurrencySettings{
-		domainSemaphore:     make(chan struct{}, 30),
-		bruteForceSemaphore: make(chan struct{}, 10),
+		domainSemaphore:     make(chan struct{}, maxConcurrentDomainProcessing),
+		bruteForceSemaphore: make(chan struct{}, maxConcurrentBruteForces),
 		bruteForceWg:        &bruteForceWg,
 	}
 
@@ -131,7 +141,7 @@ func (a *Daemon) RunDaemon() {
 		// Run scope scans
 		a.scanScopes(scopes)
 		// Wait for brute force scans to end
-		//a.concurrencySettings.bruteForceWg.Wait()
+		a.concurrencySettings.bruteForceWg.Wait()
 
 		// Reset stats when scan ends
 		log.Printf("Scan ended - duration: %s", a.stats.ScanTime.String())
@@ -170,16 +180,21 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 			if err := modules.RunModule(tool, scope.URL, outputChan); err != nil {
 				log.Printf("Failed to run module %s: %s", tool.ID, err.Error())
 			}
+
+			log.Printf("Finished scanning scope %s with tool %s", scope.URL, tool.ID)
 		}
 
 		// Close output channel once all scans have finished
 		close(outputChan)
+		log.Printf("Finished scanning scope %s", scope.URL)
 
 		// Set scope's first_run to false after intial scan
 		if scope.FirstRun == true {
 			newScope := scope
 			newScope.FirstRun = false
-			a.db.UpdateScope(newScope)
+			if err := a.db.UpdateScope(newScope); err != nil {
+				log.Printf("Failed to update scope after scan: %s", err.Error())
+			}
 		}
 	}
 }
@@ -212,10 +227,6 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 			log.Printf("Failed to consume output: Invalid table %s", table)
 		}
 	}
-
-	// TODO: maybe wait for the bruteforce in the RunDaemon() function to avoid blocking
-	// Wait for brute force attemtps to finish
-	a.concurrencySettings.bruteForceWg.Wait()
 
 	// Attepmt to delete all unsuccessful domains found from previous scan
 	if err := a.db.DeleteUnsuccessfulDomains(); err != nil {
@@ -250,7 +261,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	// Return early if domain was already processed in this scan
 	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
 		if existingDomain.StatusCode == 0 {
-			log.Printf("Already processed invalid domain %s - SKIPPING", baseURL)
+			log.Printf("Already processed invalid domain %s - SKIPPING", input.Output)
 			return
 		}
 
@@ -258,21 +269,17 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		return
 	}
 
-	// Make GET request and get fingerprinted technologies
-	responseDetails, err := getResDetails(httpClient, baseURL)
-	if err != nil {
-		log.Printf("Failed to get response for domain %s: %s", baseURL, err.Error())
-		return
-	}
-
 	foundDomain := models.Domain{
 		TargetUUID: target.GetUUID(),
 		ScanUUID:   a.currentScanUUID,
 		URL:        baseURL,
-		StatusCode: responseDetails.statusCode,
 	}
 
-	if !responseDetails.successful {
+	// Make GET request and get fingerprinted technologies
+	responseDetails, err := getResDetails(httpClient, baseURL)
+	if err != nil {
+		log.Printf("Failed to get response for domain %s: %s", baseURL, err.Error())
+
 		// Insert domain where request was unsuccessful, so that next iterations can exit early if it already processed the domain in this scan
 		foundDomain.UUID = uuid.NewString()
 		if err := a.db.InsertDomainRecord(foundDomain); err != nil {
@@ -285,6 +292,9 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		// Return early if request was unsuccessful
 		return
 	}
+
+	// Set found domain's status code
+	foundDomain.StatusCode = responseDetails.statusCode
 
 	log.Printf("Processing URL %s", baseURL)
 

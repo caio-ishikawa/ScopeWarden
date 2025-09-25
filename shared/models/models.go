@@ -38,8 +38,9 @@ type TargetTables interface {
 }
 
 type Target struct {
-	UUID string `json:"uuid"`
-	Name string `json:"name"`
+	UUID    string `json:"uuid"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
 }
 
 func (t Target) GetUUID() string {
@@ -70,11 +71,10 @@ func (d Domain) GetNotificationName() string {
 }
 
 type Scope struct {
-	UUID             string `json:"uuid"`
-	TargetUUID       string `json:"target_uuid"`
-	URL              string `json:"url"`
-	AcceptSubdomains bool   `json:"accept_subdomains"`
-	FirstRun         bool   `json:"first_run"`
+	UUID       string `json:"uuid"`
+	TargetUUID string `json:"target_uuid"`
+	URL        string `json:"url"`
+	FirstRun   bool   `json:"first_run"`
 }
 
 type BruteForced struct {

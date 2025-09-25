@@ -3,13 +3,13 @@ package store
 const createTablesQuery = `
 CREATE TABLE IF NOT EXISTS target (
 	uuid TEXT NOT NULL UNIQUE,
-	name TEXT NOT NULL UNIQUE
+	name TEXT NOT NULL UNIQUE,
+	enabled BOOL NOT NULL DEFAULT true,
 );
 CREATE TABLE IF NOT EXISTS scope (
 	uuid TEXT NOT NULL UNIQUE,
 	target_uuid TEXT NOT NULL,
 	url TEXT NOT NULL UNIQUE,
-	accept_subdomains BOOL NOT NULL DEFAULT false,
 	first_run BOOL NOT NULL DEFAULT true,
 	last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -9,6 +9,7 @@ import (
 )
 
 type OutputType string
+type Intensity string
 
 const (
 	RealTimeOutput OutputType = "realtime"
@@ -17,12 +18,16 @@ const (
 	TargetPlaceholder   = "<target>"
 	WordlistPlaceholder = "<wordlist>"
 	PortScanTool        = "nmap"
+
+	Aggressive   Intensity = "aggressive"
+	Conservative Intensity = "conservative"
 )
 
 type GlobalConfig struct {
 	// How frequently the scan runs (in hours)
-	Schedule int  `yaml:"schedule"`
-	Notify   bool `yaml:"notify"`
+	Schedule  int       `yaml:"schedule"`
+	Notify    bool      `yaml:"notify"`
+	Intensity Intensity `yaml:"intensity"`
 }
 
 type OutputParserConfig struct {
@@ -175,6 +180,15 @@ func NewDaemonConfig() (DaemonConfig, error) {
 		return DaemonConfig{}, fmt.Errorf("Failed to parse config yaml: %w", err)
 	}
 
+	// Default global schedule to 12h
+	if modules.Global.Schedule == 0 {
+		modules.Global.Schedule = 12
+	}
+
+	if modules.Global.Intensity == "" {
+		modules.Global.Intensity = "conservative"
+	}
+
 	// Validate tools config
 	for _, tool := range modules.Tools {
 		if tool.Cmd == "" {
@@ -190,7 +204,13 @@ func NewDaemonConfig() (DaemonConfig, error) {
 		}
 
 		if tool.BruteForceConfig.Run {
+			if tool.BruteForceConfig.Cmd == "" {
+				return DaemonConfig{}, fmt.Errorf("Invalid config yaml: brute_force is enabled but has no cmd")
+			}
 
+			if tool.BruteForceConfig.Regex == "" {
+				return DaemonConfig{}, fmt.Errorf("Invalid config yaml: brute_force is enabled but has no regex")
+			}
 		}
 	}
 

@@ -45,6 +45,14 @@ func (db Database) InsertTarget(target models.Target) error {
 	return nil
 }
 
+func (db Database) UpdateTargetEnabled(targetName string, enabled bool) error {
+	if _, err := db.connection.Exec(`UPDATE target SET enabled = ? WHERE name = ?`, enabled, targetName); err != nil {
+		return fmt.Errorf("Failed to insert target: %w", err)
+	}
+
+	return nil
+}
+
 func (db Database) GetTarget(uuid string) (*models.Target, error) {
 	var target models.Target
 	err := db.connection.QueryRow(`SELECT uuid, name FROM target WHERE uuid = ?`, uuid).Scan(&target.UUID, &target.Name)
@@ -75,11 +83,10 @@ func (db Database) RemoveTarget(targetUUID uuid.UUID) error {
 
 func (db Database) InsertScope(scope models.Scope) error {
 	if _, err := db.connection.Exec(
-		`INSERT INTO scope (uuid, target_uuid, url, accept_subdomains) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO scope (uuid, target_uuid, url) VALUES (?, ?, ?)`,
 		scope.UUID,
 		scope.TargetUUID,
 		scope.URL,
-		scope.AcceptSubdomains,
 	); err != nil {
 		return fmt.Errorf("Failed to insert scope: %w", err)
 	}
@@ -89,11 +96,10 @@ func (db Database) InsertScope(scope models.Scope) error {
 
 func (db Database) GetScope(targetUUID string) (*models.Scope, error) {
 	var scope models.Scope
-	err := db.connection.QueryRow(`SELECT uuid, target_uuid, url, accept_subdomains, first_run FROM scope WHERE target_uuid = ?`, targetUUID).Scan(
+	err := db.connection.QueryRow(`SELECT uuid, target_uuid, url, first_run FROM scope WHERE target_uuid = ?`, targetUUID).Scan(
 		&scope.UUID,
 		&scope.TargetUUID,
 		&scope.URL,
-		&scope.AcceptSubdomains,
 		&scope.FirstRun,
 	)
 	if err != nil {
@@ -108,7 +114,7 @@ func (db Database) GetScope(targetUUID string) (*models.Scope, error) {
 }
 
 func (db Database) GetAllScopes() ([]models.Scope, error) {
-	rows, err := db.connection.Query("SELECT uuid, target_uuid, url, accept_subdomains, first_run FROM scope")
+	rows, err := db.connection.Query("SELECT uuid, target_uuid, url, first_run FROM scope")
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get all scopes: %w", err)
 	}
@@ -117,7 +123,7 @@ func (db Database) GetAllScopes() ([]models.Scope, error) {
 	var results []models.Scope
 	for rows.Next() {
 		var item models.Scope
-		if err := rows.Scan(&item.UUID, &item.TargetUUID, &item.URL, &item.AcceptSubdomains, &item.FirstRun); err != nil {
+		if err := rows.Scan(&item.UUID, &item.TargetUUID, &item.URL, &item.FirstRun); err != nil {
 			return nil, fmt.Errorf("Failed to scan scope row: %w", err)
 		}
 

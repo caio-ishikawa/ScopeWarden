@@ -30,9 +30,8 @@ type BruteForcedListResponse struct {
 }
 
 type InsertScopeRequest struct {
-	TargetName       string `json:"target_name"`
-	URL              string `json:"url"`
-	AcceptSubdomains bool   `json:"accept_subdomains"`
+	TargetName string `json:"target_name"`
+	URL        string `json:"url"`
 }
 
 type InsertTargetRequest struct {

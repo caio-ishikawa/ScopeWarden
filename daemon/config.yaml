@@ -1,6 +1,7 @@
 global:
   schedule: 12
   nofity: true
+  intensity: 'aggressive'
 
 tools:
   - id: gau
@@ -21,7 +22,7 @@ tools:
       regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
       conditions:
         - technology: 'php'
-          wordlist: '/home/caio/offsec/resources/seclists/Discovery/Web-Content/Programming-Language-Specific/CommonBackdoors-PHP.fuzz.txt'
+          wordlist: '/home/caio/offsec/resources/seclists/Discovery/Web-Content/Programming-Language-Specific/Common-PHP-Filenames.txt'
     parser:
       type: 'realtime'
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'

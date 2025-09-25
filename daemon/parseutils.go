@@ -13,7 +13,6 @@ import (
 )
 
 type ResponseDetails struct {
-	successful   bool
 	technologies []string
 	statusCode   int
 }
@@ -44,7 +43,7 @@ func parseURL(urlStr string) (string, error) {
 func getResDetails(httpClient http.Client, url string) (ResponseDetails, error) {
 	res, err := httpClient.Get(url)
 	if err != nil {
-		return ResponseDetails{successful: false}, nil
+		return ResponseDetails{}, fmt.Errorf("Failed to make request to domain %s: %w", url, err)
 	}
 	defer res.Body.Close()
 
@@ -58,7 +57,6 @@ func getResDetails(httpClient http.Client, url string) (ResponseDetails, error) 
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
 		return ResponseDetails{
-			successful:   true,
 			technologies: []string{},
 			statusCode:   statusCode,
 		}, nil
@@ -67,7 +65,6 @@ func getResDetails(httpClient http.Client, url string) (ResponseDetails, error) 
 	wappalyzerClient, err := wappalyzer.New()
 	if err != nil {
 		return ResponseDetails{
-			successful:   true,
 			technologies: []string{},
 			statusCode:   statusCode,
 		}, nil
@@ -80,7 +77,6 @@ func getResDetails(httpClient http.Client, url string) (ResponseDetails, error) 
 	}
 
 	return ResponseDetails{
-		successful:   true,
 		technologies: technologies,
 		statusCode:   statusCode,
 	}, nil
