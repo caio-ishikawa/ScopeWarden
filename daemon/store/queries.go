@@ -4,7 +4,7 @@ const createTablesQuery = `
 CREATE TABLE IF NOT EXISTS target (
 	uuid TEXT NOT NULL UNIQUE,
 	name TEXT NOT NULL UNIQUE,
-	enabled BOOL NOT NULL DEFAULT true,
+	enabled BOOL NOT NULL DEFAULT true
 );
 CREATE TABLE IF NOT EXISTS scope (
 	uuid TEXT NOT NULL UNIQUE,

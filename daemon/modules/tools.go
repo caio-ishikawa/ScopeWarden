@@ -68,8 +68,8 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(2)
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		re := regexp.MustCompile(regex)
@@ -93,6 +93,7 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 	}()
 
 	if tool.VerboseLogging || tool.BruteForceConfig.Regex == regex {
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			scanner := bufio.NewScanner(stderr)

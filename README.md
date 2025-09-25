@@ -145,17 +145,19 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
 
 #### Navigating interactive table:
 The first table displayed when running -t is the domains table. It shows all domains found when running the configured tools and the status code it received when testing the domain. To navigate the table:
-- **[J,K]**: Used for naviating up and down the tables
-- **[H,L]**: Used for going back and forward 1 page
-- **[P]**: Used to switch to the ports table. It displays the ports found for the selected domain when running the configured port scan and their respective port states. 
-- **[A]**: Used to show the results of the brute forced results for the selected domain.
-- **[B]**: Used to go back to the main table.
+- **[J,K]:** Used for naviating up and down the tables
+- **[H,L]:** Used for going back and forward 1 page
+- **[P]:** Used to switch to the ports table. It displays the ports found for the selected domain when running the configured port scan and their respective port states. 
+- **[A]:** Used to show the results of the brute forced results for the selected domain.
+- **[B]:** Used to go back to the main table.
+- **[C]:** Used to copy selected domain URL to clipboard.
 
 ## Contributing
 Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remember to update the README in the PR when a change requires it.
 
 I would especially welcome changes towards these features:
 - **Allow file output parser for tool:** Add output parser type called 'file' which parses tool output file instead of the real time output in stdout. Ideally it would set the output path to `/tmp` and delete it after processing.
+- **Per-scope rate-limit:** Add a way to configure ScopeWarden to rate-limit requests and brute force attepmts per-scope.
 - **Web interface**: Add web interface as an alternative to the CLI.
 
 ## TODO
@@ -172,4 +174,4 @@ I would especially welcome changes towards these features:
 - [x] Have 'Enter' go to the domain URL in main table and to the bruteforced path in the bruteforce table
 - [ ] Test Makefile installation
 - [ ] Show total pages in domains table
-- [ ] Copy domain using 'c' 
+- [x] Copy domain using 'c' 

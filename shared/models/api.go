@@ -15,6 +15,8 @@ type DomainWithCount struct {
 
 type DomainListResponse struct {
 	Domains []DomainWithCount `json:"domains"`
+	Total   int               `json:"total"`
+	Page    int               `json:"page"`
 }
 
 type ScopeListResponse struct {

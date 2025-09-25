@@ -107,7 +107,6 @@ func (c *CLI) handleKeyK() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
-	// TODO: return early if no ports
 	if c.state == TargetDomainTable {
 		c.table.SetCursor(0)
 
@@ -138,7 +137,6 @@ func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyA() (tea.Model, tea.Cmd, bool) {
-	// TODO: return early if no bruteforced
 	if c.state == TargetDomainTable {
 		c.table.SetCursor(0)
 
@@ -214,30 +212,52 @@ func (c *CLI) handleKeyQ() (tea.Model, tea.Cmd, bool) {
 
 func (c *CLI) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable {
-		cmd := exec.Command("xdg-open", c.selectedDomainURL)
-		if err := cmd.Run(); err != nil {
-			tea.Printf("Failed to open domain %s", c.selectedDomainURL)
+		if err := c.openURL(c.selectedDomainURL); err != nil {
+			tea.Println(err.Error())
 		}
 	}
 	if c.state == BruteForcedTable {
 		bruteForced := c.table.SelectedRow()[0]
-		var cmd *exec.Cmd
+		var err error
 
 		// Validate if we can implicitly create a URL to attempt opening on the browser based on the brute forced path
 		if bruteForced[0] == '/' {
-			cmd = exec.Command("xdg-open", fmt.Sprintf("%s%s", c.selectedDomainURL, bruteForced))
+			err = c.openURL(fmt.Sprintf("%s%s", c.selectedDomainURL, bruteForced))
 		} else if _, err := url.Parse(bruteForced); err != nil {
-			cmd = exec.Command("xdg-open", bruteForced)
+			err = c.openURL(bruteForced)
 		} else {
-			cmd = exec.Command("xdg-open", fmt.Sprintf("%s/%s", c.selectedDomainURL, bruteForced))
+			err = c.openURL(fmt.Sprintf("%s/%s", c.selectedDomainURL, bruteForced))
 		}
 
-		if cmd != nil {
-			if err := cmd.Run(); err != nil {
-				tea.Printf("Failed to open bruteforced %s", bruteForced)
-			}
+		if err != nil {
+			tea.Println(err.Error())
 		}
 	}
 
+	return nil, nil, true
+}
+
+func (c *CLI) handleKeyC() (tea.Model, tea.Cmd, bool) {
+	// Copy domain URL to clipboard
+	if c.state == TargetDomainTable {
+		switch c.os {
+		case Linux:
+			// Running this with 'echo' instead would copy an extra newline at the end
+			cmd := exec.Command("printf", "%s", c.selectedDomainURL, "|", "xclip", "-selection", "clipboard")
+			if err := cmd.Run(); err != nil {
+				tea.Printf("Failed to open domain %s", c.selectedDomainURL)
+			}
+		case MacOS:
+			cmd := exec.Command("echo", c.selectedDomainURL, "|", "pbcopy")
+			if err := cmd.Run(); err != nil {
+				tea.Printf("Failed to open domain %s", c.selectedDomainURL)
+			}
+		case Windows:
+			cmd := exec.Command(c.selectedDomainURL, "|", "clip")
+			if err := cmd.Run(); err != nil {
+				tea.Printf("Failed to open domain %s", c.selectedDomainURL)
+			}
+		}
+	}
 	return nil, nil, true
 }

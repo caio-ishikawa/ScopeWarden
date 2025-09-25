@@ -278,7 +278,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	// Make GET request and get fingerprinted technologies
 	responseDetails, err := getResDetails(httpClient, baseURL)
 	if err != nil {
-		log.Printf("Failed to get response for domain %s: %s", baseURL, err.Error())
+		log.Printf("Failed to get response: %s", err.Error())
 
 		// Insert domain where request was unsuccessful, so that next iterations can exit early if it already processed the domain in this scan
 		foundDomain.UUID = uuid.NewString()
@@ -286,8 +286,6 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 			log.Printf("Failed to insert non-working domain %s: %s", baseURL, err.Error())
 			return
 		}
-
-		log.Printf("Failed to make request to domain %s - SKIPPING", baseURL)
 
 		// Return early if request was unsuccessful
 		return

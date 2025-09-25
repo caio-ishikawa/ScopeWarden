@@ -7,6 +7,7 @@ import (
 	"github.com/caio-ishikawa/scopewarden/shared/models"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strconv"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -63,23 +64,68 @@ var (
 )
 
 type CLIState string
+type OperatingSystem string
 
 const (
 	TargetDomainTable CLIState = "DomainTable"
 	PortsTable        CLIState = "PortState"
 	StatsTable        CLIState = "StatsTable"
 	BruteForcedTable  CLIState = "BruteForcedTable"
+
+	Linux   OperatingSystem = "Linux"
+	MacOS   OperatingSystem = "MacOS"
+	Windows OperatingSystem = "Windows"
 )
 
 type CLI struct {
 	table             table.Model
 	help              help.Model
+	os                OperatingSystem
 	selectedDomainURL string
 	selectedDomainIdx int
 	domainOffset      int
 	bruteForcedOffset int
 	targetUUID        string
 	state             CLIState
+}
+
+func NewCLI() (CLI, error) {
+	t := table.New()
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color(green)).
+		BorderBottom(true).
+		Bold(false)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color(black)).
+		Background(lipgloss.Color(green)).
+		Bold(true)
+
+	t.SetStyles(s)
+	t.SetHeight(tableHeightHalfScreen)
+
+	var operatingSystem OperatingSystem
+	switch runtime.GOOS {
+	case "linux":
+		operatingSystem = Linux
+	case "darwin":
+		operatingSystem = MacOS
+	case "windows":
+		operatingSystem = Windows
+	default:
+		return CLI{}, fmt.Errorf("Unsupported OS: %s", runtime.GOOS)
+	}
+
+	return CLI{
+		table:             t,
+		help:              help.New(),
+		os:                operatingSystem,
+		domainOffset:      0,
+		bruteForcedOffset: 0,
+		selectedDomainURL: "",
+		selectedDomainIdx: 0,
+	}, nil
 }
 
 func (c *CLI) Init() tea.Cmd { return nil }
@@ -123,6 +169,10 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m, c, skip := c.handleKeyB(); !skip {
 				return m, c
 			}
+		case "c":
+			if m, c, skip := c.handleKeyC(); !skip {
+				return m, c
+			}
 		case "q":
 			if m, c, skip := c.handleKeyQ(); !skip {
 				return m, c
@@ -142,32 +192,6 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *CLI) View() string {
 	return baseStyle.Render(m.table.View()) + "\n"
-}
-
-func NewCLI() (CLI, error) {
-	t := table.New()
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(green)).
-		BorderBottom(true).
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color(black)).
-		Background(lipgloss.Color(green)).
-		Bold(true)
-
-	t.SetStyles(s)
-	t.SetHeight(tableHeightHalfScreen)
-
-	return CLI{
-		table:             t,
-		help:              help.New(),
-		domainOffset:      0,
-		bruteForcedOffset: 0,
-		selectedDomainURL: "",
-		selectedDomainIdx: 0,
-	}, nil
 }
 
 func (c *CLI) SetTarget(targetName string) error {
