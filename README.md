@@ -3,7 +3,7 @@
 </div>
 
 ## 💻 Introduction
-ScopeWarden is a self-hostable and configurable automated recon tool. It allows for flexible automation of recon workflows without relying on any specific tool.
+ScopeWarden is a self-hostable and configurable automated recon tool with a interactive CLI table for going through the results. It allows for flexible automation of recon workflows without relying on any specific tool.
 
 ## ✨ Features
 - **Run any recon tool:** The yaml configuration file allows you to set any command for the scan to run, and a way to filter results such that only the relevant output gets considered.
@@ -12,30 +12,34 @@ ScopeWarden is a self-hostable and configurable automated recon tool. It allows 
 - **Update messages:** Can be configured to send Telegram messages if a new or previously unavailable domain/port becomes available.
 
 ## 📦 Setup & Installation
-- **Pre-installation Setup:** ScopeWarden expects some environment variables to be set before installing:
+#### Pre-installation Setup
+ScopeWarden expects some environment variables to be set before installing:
     - **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
     - **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
     - **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
 
-- **Telegram Notifications Setup:** In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
+#### Telegram Notifications Setup
+In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
     - **Set up bot token:** https://core.telegram.org/bots/features#botfather
     - **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
 
-- **Installing Daeomn/API**
-    1. Clone the repository.
-    2. In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
-    3. If you want the daemon to run as a service in Linux, run `sudo make attach-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
-    4. If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
+#### Installing Daeomn/API
+1. Clone the repository.
+2. In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
+3. If you want the daemon to run as a service in Linux, run `sudo make attach-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
+4. If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
 
-- **Installing CLI**
-    1. Clone the repository
-    2. In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
-    3. Check installation with `scopewarden -h`.
+#### Installing CLI
+1. Clone the repository
+2. In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
+3. Check installation with `scopewarden -h`.
 
 ## 🖥️ Dependencies
 - [Golang](https://go.dev/)
-- [SQLite](https://sqlite.org/)
+- [SQLite](https://sqlite.org/): To store scanning results.
 - [Nmap](https://nmap.org/): Not necessary if ScopeWarden is not configured to do automated port scans.
+- [xclip](https://github.com/astrand/xclip): To copy URLs to the clipboard on Linux distros using X11.
+- [wl-clipboard](https://github.com/bugaevc/wl-clipboard): To copy URLs to the clipboard on Linux distros using Wayland.
 - A cool terminal theme 😎
 
 ## ❓ How it works
@@ -151,6 +155,7 @@ The first table displayed when running -t is the domains table. It shows all dom
 - **[A]:** Used to show the results of the brute forced results for the selected domain.
 - **[B]:** Used to go back to the main table.
 - **[C]:** Used to copy selected domain URL to clipboard.
+- **[Enter]:** Used to open the selected URL in the default browser. Can only be used in the domains or brute force table.
 
 ## Contributing
 Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remember to update the README in the PR when a change requires it.

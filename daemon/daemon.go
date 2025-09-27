@@ -227,11 +227,6 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 			log.Printf("Failed to consume output: Invalid table %s", table)
 		}
 	}
-
-	// Attepmt to delete all unsuccessful domains found from previous scan
-	if err := a.db.DeleteUnsuccessfulDomains(); err != nil {
-		log.Printf("Failed to delete unsuccessful domains: %s", err.Error())
-	}
 }
 
 // Process URL output for a tool (parses, inserts/updates DB, notifies)
@@ -260,12 +255,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 	// Return early if domain was already processed in this scan
 	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
-		if existingDomain.StatusCode == 0 {
-			log.Printf("Already processed invalid domain %s - SKIPPING", input.Output)
-			return
-		}
-
-		log.Printf("Already processed URL %s - SKIPPING", baseURL)
+		//log.Printf("Already processed URL %s - SKIPPING", baseURL)
 		return
 	}
 
@@ -282,8 +272,9 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 		// Insert domain where request was unsuccessful, so that next iterations can exit early if it already processed the domain in this scan
 		foundDomain.UUID = uuid.NewString()
+		foundDomain.StatusCode = responseDetails.statusCode
 		if err := a.db.InsertDomainRecord(foundDomain); err != nil {
-			log.Printf("Failed to insert non-working domain %s: %s", baseURL, err.Error())
+			//log.Printf("Failed to insert non-working domain %s: %s", baseURL, err.Error())
 			return
 		}
 
@@ -405,7 +396,7 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 
 		a.stats.TotalFoundPorts += 1
 
-		log.Printf("Processing port %s for domain %s", scanner.Text(), domain.URL)
+		//log.Printf("Processing port %s for domain %s", scanner.Text(), domain.URL)
 
 		portData, err := parsePortScanLine(scanner.Text())
 		if err != nil {

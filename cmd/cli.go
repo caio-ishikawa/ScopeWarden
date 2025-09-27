@@ -19,6 +19,8 @@ import (
 const (
 	green = "#A7C080"
 	black = "#1E2326"
+	grey  = "#384B55"
+	white = "#F2EFDF"
 	red   = "#E67E80"
 
 	tableLimit            = 39
@@ -46,20 +48,20 @@ var (
 	}
 
 	URLColumns = []table.Column{
-		{Title: "STATUS", Width: 6},
-		{Title: "PORTS", Width: 5},
-		{Title: "BRUTE", Width: 5},
-		{Title: "URL", Width: 70},
+		{Title: "Status", Width: 6},
+		{Title: "Ports", Width: 5},
+		{Title: "Brute", Width: 5},
+		{Title: "URL", Width: 63},
 	}
 
 	PortColumns = []table.Column{
-		{Title: "Port", Width: 10},
+		{Title: "Ports", Width: 10},
 		{Title: "Protocol", Width: 15},
-		{Title: "State", Width: 63},
+		{Title: "State", Width: 19},
 	}
 
 	BruteForcedColumns = []table.Column{
-		{Title: "Asset", Width: 92},
+		{Title: "Assets", Width: 22},
 	}
 )
 
@@ -71,16 +73,29 @@ const (
 	PortsTable        CLIState = "PortState"
 	StatsTable        CLIState = "StatsTable"
 	BruteForcedTable  CLIState = "BruteForcedTable"
+	SortMode          CLIState = "Sort"
 
 	Linux   OperatingSystem = "Linux"
 	MacOS   OperatingSystem = "MacOS"
 	Windows OperatingSystem = "Windows"
 )
 
+// Map of domain URL to PerDomainRow
+type DomainRows map[string]PerDomainRow
+
+type PerDomainRow struct {
+	Port        []table.Row
+	BruteForced []table.Row
+}
+
 type CLI struct {
 	table             table.Model
+	portsTable        table.Model
+	bruteForcedTable  table.Model
+	domainMap         DomainRows
 	help              help.Model
 	os                OperatingSystem
+	sortBy            models.DomainSortBy
 	selectedDomainURL string
 	selectedDomainIdx int
 	domainOffset      int
@@ -90,7 +105,7 @@ type CLI struct {
 }
 
 func NewCLI() (CLI, error) {
-	t := table.New()
+	mainTable := table.New()
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -102,8 +117,16 @@ func NewCLI() (CLI, error) {
 		Background(lipgloss.Color(green)).
 		Bold(true)
 
-	t.SetStyles(s)
-	t.SetHeight(tableHeightHalfScreen)
+	//mainTable.SetStyles(s)
+	mainTable.SetHeight(tableHeightHalfScreen)
+
+	portsTable := table.New()
+	//portsTable.SetStyles(s)
+	portsTable.SetHeight(tableHeightHalfScreen)
+
+	bruteForcedTable := table.New()
+	//bruteForcedTable.SetStyles(s)
+	bruteForcedTable.SetHeight(tableHeightHalfScreen)
 
 	var operatingSystem OperatingSystem
 	switch runtime.GOOS {
@@ -118,8 +141,13 @@ func NewCLI() (CLI, error) {
 	}
 
 	return CLI{
-		table:             t,
+		table:             mainTable,
+		portsTable:        portsTable,
+		bruteForcedTable:  bruteForcedTable,
+		domainMap:         map[string]PerDomainRow{},
+		state:             TargetDomainTable,
 		help:              help.New(),
+		sortBy:            models.SortNone,
 		os:                operatingSystem,
 		domainOffset:      0,
 		bruteForcedOffset: 0,
@@ -173,6 +201,10 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m, c, skip := c.handleKeyC(); !skip {
 				return m, c
 			}
+		case "s":
+			if m, c, skip := c.handleKeyS(); !skip {
+				return m, c
+			}
 		case "q":
 			if m, c, skip := c.handleKeyQ(); !skip {
 				return m, c
@@ -190,8 +222,8 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, cmd
 }
 
-func (m *CLI) View() string {
-	return baseStyle.Render(m.table.View()) + "\n"
+func (c *CLI) View() string {
+	return c.updateStyles()
 }
 
 func (c *CLI) SetTarget(targetName string) error {
@@ -217,6 +249,18 @@ func (c *CLI) RenderURLsTable() error {
 	c.table.SetRows(rows)
 	c.table.SetCursor(0)
 	c.selectedDomainURL = c.table.SelectedRow()[3]
+
+	// Get associated domain rows
+	perDomainRows, ok := c.domainMap[c.selectedDomainURL]
+	if !ok {
+		panic(fmt.Sprintf("Could not find associated domain rows for %s", c.selectedDomainURL))
+	}
+
+	c.portsTable.SetColumns(PortColumns)
+	c.portsTable.SetRows(perDomainRows.Port)
+
+	c.bruteForcedTable.SetColumns(BruteForcedColumns)
+	c.bruteForcedTable.SetRows(perDomainRows.BruteForced)
 
 	if _, err := tea.NewProgram(c).Run(); err != nil {
 		return fmt.Errorf("Error rendering stats table: %w", err)
@@ -253,26 +297,50 @@ func (c *CLI) RenderStatsTable() error {
 	return nil
 }
 
+// Gets domains and creates map for domain to associated rows (ports & bruteforced)
 func (c *CLI) GetDomainRows() ([]table.Row, error) {
-	domains, err := GetDomainsByTarget(c.targetUUID, c.domainOffset)
+	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get domains rows: %w", err)
 	}
 
-	var rows []table.Row
-	for _, domain := range domains {
-		rows = append(
-			rows,
-			table.Row{
-				strconv.Itoa(domain.StatusCode),
-				strconv.Itoa(domain.PortCount),
-				strconv.Itoa(domain.BruteForcedCount),
-				domain.URL,
-			},
-		)
+	output := make([]table.Row, 0)
+	for _, domain := range res.Domains {
+		var row PerDomainRow
+
+		domainRow := table.Row{
+			strconv.Itoa(domain.StatusCode),
+			strconv.Itoa(domain.PortCount),
+			strconv.Itoa(domain.BruteForcedCount),
+			domain.URL,
+		}
+
+		for _, port := range domain.Ports {
+			row.Port = append(
+				row.Port,
+				table.Row{
+					strconv.Itoa(port.Port),
+					string(port.Protocol),
+					string(port.State),
+				},
+			)
+		}
+
+		// TODO: Fix
+		for _, bruteForced := range domain.BruteForced {
+			row.BruteForced = append(
+				row.BruteForced,
+				table.Row{
+					bruteForced.Path,
+				},
+			)
+		}
+
+		output = append(output, domainRow)
+		c.domainMap[domain.URL] = row
 	}
 
-	return rows, nil
+	return output, nil
 }
 
 func (c *CLI) GetPortRows(ports []models.Port) ([]table.Row, error) {
@@ -298,24 +366,24 @@ func (c *CLI) GetBruteForcedRows(assets []models.BruteForced) ([]table.Row, erro
 	return rows, nil
 }
 
-func GetDomainsByTarget(target string, offset int) ([]models.DomainWithCount, error) {
-	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v", apiURL, target, tableLimit, offset)
+func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy) (models.DomainListResponse, error) {
+	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v&sort_by=%s", apiURL, target, tableLimit, offset, sortBy)
 	res, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("Could not get domains for target %s: %w", target, err)
+		return models.DomainListResponse{}, fmt.Errorf("Could not get domains for target %s: %w", target, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		return models.DomainListResponse{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
 	}
 
 	var ret models.DomainListResponse
 	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
-		return nil, fmt.Errorf("Failed to decode API response: %w", err)
+		return models.DomainListResponse{}, fmt.Errorf("Failed to decode API response: %w", err)
 	}
 
-	return ret.Domains, nil
+	return ret, nil
 }
 
 func GetPortsByDomain(domainURL string) ([]models.Port, error) {

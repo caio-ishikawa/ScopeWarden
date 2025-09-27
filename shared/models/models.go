@@ -5,6 +5,9 @@ import "fmt"
 type Table string
 type PortState string
 type Protocol string
+type DomainSortBy string
+
+const ()
 
 const (
 	TargetTable      Table = "target"
@@ -21,6 +24,10 @@ const (
 	UDP  Protocol = "udp"
 	TCP  Protocol = "tcp"
 	SCTP Protocol = "sctp"
+
+	SortPorts       DomainSortBy = "count_ports"
+	SortBruteForced DomainSortBy = "count_bruteforced"
+	SortNone        DomainSortBy = ""
 )
 
 type Module string

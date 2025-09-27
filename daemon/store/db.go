@@ -149,7 +149,7 @@ func (db Database) UpdateScope(scope models.Scope) error {
 	return nil
 }
 
-func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]models.DomainWithCount, error) {
+func (db Database) GetDomainsByTarget(limit, offset int, sortBy models.DomainSortBy, targetUUID string) (models.DomainListResponse, error) {
 	query := fmt.Sprintf(`
 	SELECT 
 		d.uuid,
@@ -169,26 +169,52 @@ func (db Database) GetDomainsByTarget(limit, offset int, targetUUID string) ([]m
 		FROM bruteforced
 		GROUP BY domain_uuid
 	) b ON b.domain_uuid = d.uuid
-	WHERE d.target_uuid = ? AND d.status_code != 0 LIMIT %v OFFSET %v`, limit, offset)
+	WHERE d.target_uuid = ? AND d.status_code != 0`)
+
+	if sortBy != models.SortNone {
+		query = fmt.Sprintf("%s ORDER BY %s DESC", query, sortBy)
+	}
+
+	query = fmt.Sprintf("%s LIMIT %v OFFSET %v", query, limit, offset)
 
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get all domain: %w", err)
+		return models.DomainListResponse{}, fmt.Errorf("Failed to get all domain: %w", err)
 	}
 	defer rows.Close()
 
-	var results []models.DomainWithCount
+	var results models.DomainListResponse
+	results.Domains = make([]models.DomainWithCount, 0)
 	for rows.Next() {
 		var item models.DomainWithCount
 		if err := rows.Scan(&item.UUID, &item.ScanUUID, &item.URL, &item.StatusCode, &item.PortCount, &item.BruteForcedCount); err != nil {
-			return nil, fmt.Errorf("Failed to scan domain row: %w", err)
+			return models.DomainListResponse{}, fmt.Errorf("Failed to scan domain row: %w", err)
 		}
 
-		results = append(results, item)
+		results.Domains = append(results.Domains, item)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Rows error when getting domain: %w", err)
+		return models.DomainListResponse{}, fmt.Errorf("Rows error when getting domain: %w", err)
+	}
+
+	for _, domain := range results.Domains {
+		ports, err := db.GetPortByDomain(domain.UUID)
+		if err != nil {
+			return models.DomainListResponse{}, err
+		}
+
+		domain.Ports = ports
+
+		bruteForced, err := db.GetBruteForcedByDomain(domain.UUID, limit, 0)
+		if err != nil {
+			return models.DomainListResponse{}, err
+		}
+
+		domain.BruteForced = bruteForced
+
+		results.Domains = append(results.Domains, domain)
+
 	}
 
 	return results, nil

@@ -61,14 +61,32 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := a.db.GetDomainsByTarget(limit, offset, targetUUID)
-	resStruct := models.DomainListResponse{
-		Domains: domains,
+	sortByQuery := query.Get("sort_by")
+	var sortBy models.DomainSortBy
+	switch sortByQuery {
+	case string(models.SortPorts):
+		sortBy = models.SortPorts
+	case string(models.SortBruteForced):
+		sortBy = models.SortBruteForced
+	case string(models.SortNone):
+		sortBy = models.SortNone
 	}
+
+	domains, err := a.db.GetDomainsByTarget(limit, offset, sortBy, targetUUID)
+	if err != nil {
+		log.Println(err.Error())
+		http.Error(w, fmt.Sprintf("Failed to get domains for %s", targetUUID), http.StatusInternalServerError)
+	}
+
+	log.Println("================================================================")
+	log.Println(len(domains.Domains))
+	log.Println("================================================================")
+	//log.Println(len(domains.Domains[0].Ports))
+	//log.Println(len(domains.Domains[0].BruteForced))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
+	if err := json.NewEncoder(w).Encode(domains); err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}

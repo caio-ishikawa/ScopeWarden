@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/caio-ishikawa/scopewarden/shared/models"
 	tea "github.com/charmbracelet/bubbletea"
 	"net/url"
 	"os/exec"
@@ -81,26 +82,42 @@ func (c *CLI) handleKeyH() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyJ() (tea.Model, tea.Cmd, bool) {
-	c.table.MoveDown(1)
-
 	if c.state == TargetDomainTable {
+		c.table.MoveDown(1)
 		c.selectedDomainURL = c.table.SelectedRow()[3]
 		if c.selectedDomainIdx < tableLimit {
 			c.selectedDomainIdx += 1
 		}
+
+		// Update ports and bruteforced tables
+		c.updatePerDomainRows()
+	}
+	if c.state == PortsTable {
+		c.portsTable.MoveDown(1)
+	}
+	if c.state == BruteForcedTable {
+		c.bruteForcedTable.MoveDown(1)
 	}
 
 	return nil, nil, true
 }
 
 func (c *CLI) handleKeyK() (tea.Model, tea.Cmd, bool) {
-	c.table.MoveUp(1)
-
 	if c.state == TargetDomainTable {
+		c.table.MoveUp(1)
 		c.selectedDomainURL = c.table.SelectedRow()[3]
 		if c.selectedDomainIdx > 0 {
 			c.selectedDomainIdx -= 1
 		}
+
+		// Update ports and bruteforced tables
+		c.updatePerDomainRows()
+	}
+	if c.state == PortsTable {
+		c.portsTable.MoveUp(1)
+	}
+	if c.state == BruteForcedTable {
+		c.bruteForcedTable.MoveUp(1)
 	}
 
 	return nil, nil, true
@@ -108,29 +125,23 @@ func (c *CLI) handleKeyK() (tea.Model, tea.Cmd, bool) {
 
 func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable {
-		c.table.SetCursor(0)
-
-		ports, err := GetPortsByDomain(c.selectedDomainURL)
-		if err != nil {
-			tea.Printf("Failed to get ports by domain: %s", err.Error())
-			return c, tea.Quit, false
-		}
-
-		rows, err := c.GetPortRows(ports)
-		if err != nil {
-			tea.Printf("Failed to get rows and columns for ports: %s", err.Error())
-			return c, tea.Quit, false
-		}
-
-		if len(rows) == 0 {
-			return nil, nil, true
-		}
-
 		c.state = PortsTable
+		c.portsTable.SetCursor(0)
+	}
 
-		// Render port table
+	if c.state == SortMode {
+		c.sortBy = models.SortPorts
+		rows, err := c.GetDomainRows()
+		if err != nil {
+			return c, tea.Quit, false
+		}
+
+		c.state = TargetDomainTable
+
+		// Render the URL rows from previously recorded offset
+		c.table.SetColumns(URLColumns)
 		c.table.SetRows(rows)
-		c.table.SetColumns(PortColumns)
+		c.table.SetCursor(c.selectedDomainIdx)
 	}
 
 	return nil, nil, true
@@ -138,29 +149,8 @@ func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
 
 func (c *CLI) handleKeyA() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable {
-		c.table.SetCursor(0)
-
-		bruteForcedPaths, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
-		if err != nil {
-			tea.Printf("Failed to get bruteforced assets by domain: %s", err.Error())
-			return c, tea.Quit, false
-		}
-
-		rows, err := c.GetBruteForcedRows(bruteForcedPaths)
-		if err != nil {
-			tea.Printf("Failed to get rows for bruteforced assets: %s", err.Error())
-			return c, tea.Quit, false
-		}
-
-		if len(rows) == 0 {
-			return nil, nil, true
-		}
-
 		c.state = BruteForcedTable
-
-		// Render bruteforced table
-		c.table.SetRows(rows)
-		c.table.SetColumns(BruteForcedColumns)
+		c.bruteForcedTable.SetCursor(0)
 	}
 
 	return nil, nil, true
@@ -171,7 +161,20 @@ func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
 	if c.state == PortsTable || c.state == BruteForcedTable {
 		rows, err := c.GetDomainRows()
 		if err != nil {
-			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+			return c, tea.Quit, false
+		}
+
+		c.state = TargetDomainTable
+
+		// Render the URL rows from previously recorded offset
+		c.table.SetColumns(URLColumns)
+		c.table.SetRows(rows)
+		c.table.SetCursor(c.selectedDomainIdx)
+	}
+	if c.state == SortMode {
+		c.sortBy = models.SortBruteForced
+		rows, err := c.GetDomainRows()
+		if err != nil {
 			return c, tea.Quit, false
 		}
 
@@ -200,7 +203,6 @@ func (c *CLI) handleKeyQ() (tea.Model, tea.Cmd, bool) {
 		c.state = TargetDomainTable
 
 		// Render the URL rows from previously recorded offset
-		c.table.SetColumns(URLColumns)
 		c.table.SetRows(rows)
 		c.table.SetCursor(c.selectedDomainIdx)
 	} else {
@@ -217,7 +219,7 @@ func (c *CLI) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		}
 	}
 	if c.state == BruteForcedTable {
-		bruteForced := c.table.SelectedRow()[0]
+		bruteForced := c.bruteForcedTable.SelectedRow()[0]
 		var err error
 
 		// Validate if we can implicitly create a URL to attempt opening on the browser based on the brute forced path
@@ -259,5 +261,21 @@ func (c *CLI) handleKeyC() (tea.Model, tea.Cmd, bool) {
 			}
 		}
 	}
+
 	return nil, nil, true
+}
+
+func (c *CLI) handleKeyS() (tea.Model, tea.Cmd, bool) {
+	if c.state == TargetDomainTable {
+		c.state = SortMode
+	}
+	return nil, nil, true
+}
+
+func (c *CLI) updatePerDomainRows() {
+	perDomainRows, ok := c.domainMap[c.selectedDomainURL]
+	if ok {
+		c.portsTable.SetRows(perDomainRows.Port)
+		c.bruteForcedTable.SetRows(perDomainRows.BruteForced)
+	}
 }
