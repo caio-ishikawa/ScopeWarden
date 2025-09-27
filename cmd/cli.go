@@ -1,39 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"github.com/caio-ishikawa/scopewarden/shared/models"
-	"net/http"
-	"net/url"
 	"runtime"
 	"strconv"
 
+	"github.com/caio-ishikawa/scopewarden/shared/models"
+
 	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
-
-const (
-	green = "#A7C080"
-	black = "#1E2326"
-	grey  = "#384B55"
-	white = "#F2EFDF"
-	red   = "#E67E80"
-
-	tableLimit            = 39
-	tableHeightHalfScreen = 40
-	tableHeightFullScreen = 80
-	tableHeightOne        = 2
-
-	apiURL = "http://localhost:8080"
-)
-
-var baseStyle = lipgloss.NewStyle().
-	BorderStyle(lipgloss.NormalBorder()).
-	BorderForeground(lipgloss.Color(green))
 
 var (
 	// Default URL table columns
@@ -51,17 +30,43 @@ var (
 		{Title: "Status", Width: 6},
 		{Title: "Ports", Width: 5},
 		{Title: "Brute", Width: 5},
-		{Title: "URL", Width: 63},
+		{Title: "URL", Width: 65},
 	}
 
 	PortColumns = []table.Column{
 		{Title: "Ports", Width: 10},
 		{Title: "Protocol", Width: 15},
-		{Title: "State", Width: 19},
+		{Title: "State", Width: 20},
 	}
 
 	BruteForcedColumns = []table.Column{
-		{Title: "Assets", Width: 22},
+		{Title: "Assets", Width: 25},
+	}
+
+	keyMaps = map[CLIState][]key.Binding{
+		TargetDomainTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
+		},
+		PortsTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b")),
+		},
+		BruteForcedTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
+		},
+		SortMode: {
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Sort by ports", "p")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Sort by brute forced", "b")),
+		},
 	}
 )
 
@@ -231,6 +236,14 @@ func (c *CLI) View() string {
 	return c.updateStyles()
 }
 
+func (c *CLI) ShortHelp() []key.Binding {
+	return keyMaps[c.state]
+}
+
+func (c *CLI) FullHelp() [][]key.Binding {
+	return [][]key.Binding{keyMaps[c.state]}
+}
+
 func (c *CLI) SetTarget(targetName string) error {
 	target, err := GetTargetByName(targetName)
 	if err != nil {
@@ -282,16 +295,17 @@ func (c *CLI) RenderStatsTable() error {
 		return fmt.Errorf("Failed to get stats: %w", err)
 	}
 
-	rows := []table.Row{
-		{
-			strconv.Itoa(stats.TotalFoundURLs),
-			strconv.Itoa(stats.TotalNewURLs),
-			strconv.Itoa(stats.TotalFoundPorts),
-			strconv.Itoa(stats.TotalNewPorts),
-			stats.ScanTime,
-			stats.ScanBegin,
-			strconv.FormatBool(stats.IsRunning),
-		},
+	var rows []table.Row
+	for _, stat := range stats {
+		rows = append(rows, table.Row{
+			strconv.Itoa(stat.TotalFoundURLs),
+			strconv.Itoa(stat.TotalNewURLs),
+			strconv.Itoa(stat.TotalFoundPorts),
+			strconv.Itoa(stat.TotalNewPorts),
+			stat.ScanTime,
+			stat.ScanBegin,
+			strconv.FormatBool(stat.IsRunning),
+		})
 	}
 
 	c.table.SetHeight(tableHeightOne)
@@ -299,245 +313,5 @@ func (c *CLI) RenderStatsTable() error {
 	c.table.SetRows(rows)
 
 	fmt.Println(c.View())
-	return nil
-}
-
-// Gets domains and creates map for domain to associated rows (ports & bruteforced)
-func (c *CLI) GetDomainRows() ([]table.Row, error) {
-	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get domains rows: %w", err)
-	}
-
-	output := make([]table.Row, 0)
-	for _, domain := range res.Domains {
-		var row PerDomainRow
-
-		domainRow := table.Row{
-			strconv.Itoa(domain.StatusCode),
-			strconv.Itoa(domain.PortCount),
-			strconv.Itoa(domain.BruteForcedCount),
-			domain.URL,
-		}
-
-		for _, port := range domain.Ports {
-			row.Port = append(
-				row.Port,
-				table.Row{
-					strconv.Itoa(port.Port),
-					string(port.Protocol),
-					string(port.State),
-				},
-			)
-		}
-
-		for _, bruteForced := range domain.BruteForced {
-			row.BruteForced = append(
-				row.BruteForced,
-				table.Row{
-					bruteForced.Path,
-				},
-			)
-		}
-
-		output = append(output, domainRow)
-		c.domainMap[domain.URL] = row
-	}
-
-	return output, nil
-}
-
-func (c *CLI) GetPortRows(ports []models.Port) ([]table.Row, error) {
-	var rows []table.Row
-	for _, port := range ports {
-		portStr := strconv.Itoa(port.Port)
-		if portStr == "" {
-			return nil, fmt.Errorf("Failed to get rows for port: Could not convert port number to string %v", port.Port)
-		}
-
-		rows = append(rows, table.Row{portStr, string(port.Protocol), string(port.State)})
-	}
-
-	return rows, nil
-}
-
-func (c *CLI) GetBruteForcedRows(assets []models.BruteForced) ([]table.Row, error) {
-	var rows []table.Row
-	for _, asset := range assets {
-		rows = append(rows, table.Row{asset.Path})
-	}
-
-	return rows, nil
-}
-
-func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy) (models.DomainListResponse, error) {
-	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v&sort_by=%s", apiURL, target, tableLimit, offset, sortBy)
-	res, err := http.Get(url)
-	if err != nil {
-		return models.DomainListResponse{}, fmt.Errorf("Could not get domains for target %s: %w", target, err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return models.DomainListResponse{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
-	var ret models.DomainListResponse
-	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
-		return models.DomainListResponse{}, fmt.Errorf("Failed to decode API response: %w", err)
-	}
-
-	return ret, nil
-}
-
-func GetPortsByDomain(domainURL string) ([]models.Port, error) {
-	param := url.Values{}
-	param.Add("domain_url", domainURL)
-	url := fmt.Sprintf("%s/ports?%s", apiURL, param.Encode())
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("Could not get domains for domain %s: %w", domainURL, err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
-	var ret models.PortListResponse
-	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
-		return nil, fmt.Errorf("Failed to decode API response: %w", err)
-	}
-
-	return ret.Ports, nil
-}
-
-func GetBruteForcedByDomain(domainURL string, offset int) ([]models.BruteForced, error) {
-	param := url.Values{}
-	param.Add("domain_url", domainURL)
-
-	url := fmt.Sprintf("%s/bruteforced?%s&limit=%v&offset=%v", apiURL, param.Encode(), tableLimit, offset)
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("Could not get domains for domain %s: %w", domainURL, err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
-	var ret models.BruteForcedListResponse
-	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
-		return nil, fmt.Errorf("Failed to decode API response: %w", err)
-	}
-
-	return ret.BruteForcedPaths, nil
-}
-
-func GetTargetByName(target string) (models.Target, error) {
-	res, err := http.Get(fmt.Sprintf("%s/target?name=%s", apiURL, target))
-	if err != nil {
-		return models.Target{}, fmt.Errorf("Could not get domains for target %s: %w", target, err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return models.Target{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
-	var ret models.Target
-	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
-		return models.Target{}, fmt.Errorf("Failed to decode API response: %w", err)
-	}
-
-	return ret, nil
-}
-
-func GetStats() (models.StatsResponse, error) {
-	res, err := http.Get(fmt.Sprintf("%s/stats", apiURL))
-	if err != nil {
-		return models.StatsResponse{}, fmt.Errorf("Could not get stats: %w", err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return models.StatsResponse{}, fmt.Errorf("Unexpected status code: %v", res.StatusCode)
-	}
-
-	var ret models.StatsResponse
-	if err = json.NewDecoder(res.Body).Decode(&ret); err != nil {
-		return models.StatsResponse{}, fmt.Errorf("Failed to decode API response: %w", err)
-	}
-
-	return ret, nil
-}
-
-func InsertScope(scopes ScopeInsert) error {
-	for _, scopeURL := range scopes.ScopeURLs {
-		reqBody := models.InsertScopeRequest{
-			TargetName: scopes.TargetName,
-			URL:        scopeURL,
-		}
-
-		body, err := json.Marshal(&reqBody)
-		if err != nil {
-			return fmt.Errorf("Failed to marshal scope request body: %w", err)
-		}
-
-		res, err := http.Post(fmt.Sprintf("%s/insert_scope", apiURL), "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			return fmt.Errorf("Could not get stats: %w", err)
-		}
-
-		if res.StatusCode != http.StatusCreated {
-			return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-		}
-	}
-
-	return nil
-}
-
-func InsertTarget(target string) error {
-	reqBody := models.InsertTargetRequest{
-		Name: target,
-	}
-
-	body, err := json.Marshal(&reqBody)
-	if err != nil {
-		return fmt.Errorf("Failed to marshal scope request body: %w", err)
-	}
-
-	res, err := http.Post(fmt.Sprintf("%s/insert_target", apiURL), "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return fmt.Errorf("Could not insert target: %w", err)
-	}
-
-	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
-	return nil
-}
-
-func DisableTarget(target string) error {
-	reqBody := models.InsertTargetRequest{
-		Name: target,
-	}
-
-	body, err := json.Marshal(&reqBody)
-	if err != nil {
-		return fmt.Errorf("Failed to marshal scope request body: %w", err)
-	}
-
-	res, err := http.Post(fmt.Sprintf("%s/insert_target", apiURL), "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return fmt.Errorf("Could not insert target: %w", err)
-	}
-
-	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
 	return nil
 }

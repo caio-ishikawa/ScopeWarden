@@ -26,7 +26,6 @@ type ConcurrencySettings struct {
 type Daemon struct {
 	db                      store.Database
 	api                     api.API
-	currentScanUUID         string
 	concurrencySettings     ConcurrencySettings
 	currentlyProcessingURLs sync.Map
 	telegram                modules.TelegramClient
@@ -77,9 +76,9 @@ func NewDaemon() (Daemon, error) {
 		api:                 api,
 		concurrencySettings: concurrencySettings,
 		telegram:            telegram,
-		currentScanUUID:     uuid.NewString(),
 		config:              config,
 		stats: models.DaemonStats{
+			UUID:            uuid.NewString(),
 			TotalFoundURLs:  0,
 			TotalNewURLs:    0,
 			TotalFoundPorts: 0,
@@ -93,9 +92,6 @@ func NewDaemon() (Daemon, error) {
 }
 
 func (a *Daemon) RunDaemon() {
-	if err := a.db.InsertDaemonStats(a.stats); err != nil {
-		log.Fatalf("Failed to insert initial daemon stats")
-	}
 	for {
 		// Update config before every scan
 		config, err := modules.NewDaemonConfig()
@@ -112,11 +108,6 @@ func (a *Daemon) RunDaemon() {
 			continue
 		}
 
-		if a.stats.IsRunning {
-			log.Println("Previous scan ran for longer than scan timeout - CONSIDER ADJUSTING TIMEOUT")
-			continue
-		}
-
 		// Start of actual daemon
 		scopes, err := a.db.GetAllScopes()
 		if err != nil {
@@ -129,6 +120,11 @@ func (a *Daemon) RunDaemon() {
 			log.Println("No scopes found - continuing")
 			time.Sleep(10 * time.Second)
 			continue
+		}
+
+		// Insert first scan stats
+		if err := a.db.InsertDaemonStats(a.stats); err != nil {
+			log.Fatalf("Failed to insert initial daemon stats: %s", err.Error())
 		}
 
 		// Set stats for current scan
@@ -154,8 +150,8 @@ func (a *Daemon) RunDaemon() {
 			log.Printf("%s", err.Error())
 		}
 
-		// Set new scan UUID
-		a.currentScanUUID = uuid.NewString()
+		// Set new scan UUID at the end of the scan
+		a.stats.UUID = uuid.NewString()
 	}
 }
 
@@ -206,9 +202,7 @@ func (a *Daemon) Stats() models.DaemonStats {
 	return a.stats
 }
 
-// Consumes real time output of a tool. Handles both URL outputs and the output of the brute force attempts. Since brute force attempts
-// can take some time, they are run concurrently and are limited to 5 processes. This function waits for the processing of the brute force
-// scans to finish before returning.
+// Consumes real time output of a tool. Handles both URL outputs and the output of the brute force attempts
 func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.ToolOutput, target models.TargetTables, firstRun bool) {
 	for input := range inputChan {
 		switch table {
@@ -268,14 +262,13 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	}
 
 	// Return early if domain was already processed in this scan
-	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
-		//log.Printf("Skipping already processed URL %s", baseURL)
+	if existingDomain != nil && existingDomain.ScanUUID == a.stats.UUID {
 		return
 	}
 
 	foundDomain := models.Domain{
 		TargetUUID: target.GetUUID(),
-		ScanUUID:   a.currentScanUUID,
+		ScanUUID:   a.stats.UUID,
 		URL:        baseURL,
 	}
 
@@ -334,11 +327,11 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	}
 
 	// Update and notify if staus code has changed since last run
-	if existingDomain.StatusCode != responseDetails.statusCode || existingDomain.StatusCode == 0 {
+	if existingDomain.StatusCode != responseDetails.statusCode {
 		foundDomain.UUID = existingDomain.UUID
 		foundDomain.LastUpdated = time.Now().String()
 
-		if err := a.updateExistingDomain(foundDomain, notification); err != nil {
+		if err := a.updateExistingDomain(foundDomain, *existingDomain, notification); err != nil {
 			log.Printf("Failed to update existing domain: %s", err.Error())
 			return
 		}
@@ -370,19 +363,21 @@ func (a *Daemon) insertNewFoundDomain(newDomain models.Domain, notification mode
 	return nil
 }
 
-func (a *Daemon) updateExistingDomain(newDomain models.Domain, notification models.Notification) error {
-	a.stats.TotalNewURLs += 1
-	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-		log.Printf("%s", err.Error())
-	}
-
+func (a *Daemon) updateExistingDomain(newDomain models.Domain, existingDomain models.Domain, notification models.Notification) error {
 	if err := a.db.UpdateDomainRecord(newDomain); err != nil {
 		return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
 	}
 
-	if a.config.Global.Notify {
-		if err := a.telegram.SendMessage(notification); err != nil {
-			return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+	if existingDomain.StatusCode == 0 && newDomain.StatusCode != 0 {
+		a.stats.TotalNewURLs += 1
+		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
+			log.Printf("%s", err.Error())
+		}
+
+		if a.config.Global.Notify {
+			if err := a.telegram.SendMessage(notification); err != nil {
+				return fmt.Errorf("Failed to process url %s: %w", newDomain.URL, err)
+			}
 		}
 	}
 
@@ -418,8 +413,6 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 		}
 
 		a.stats.TotalFoundPorts += 1
-
-		//log.Printf("Processing port %s for domain %s", scanner.Text(), domain.URL)
 
 		portData, err := parsePortScanLine(scanner.Text())
 		if err != nil {

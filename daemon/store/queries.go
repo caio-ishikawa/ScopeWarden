@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS port (
 	UNIQUE(uuid, port)
 );
 CREATE TABLE IF NOT EXISTS daemon_stats (
+	uuid TEXT NOT NULL UNIQUE,
 	total_found_urls INTEGER DEFAULT 0,
 	total_new_urls INTEGER DEFAULT 0,
 	total_found_ports INTEGER DEFAULT 0,

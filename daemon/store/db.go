@@ -362,7 +362,8 @@ func (db Database) GetPortByDomain(domainUUID string) ([]models.Port, error) {
 
 func (db Database) InsertDaemonStats(stats models.DaemonStats) error {
 	if _, err := db.connection.Exec(
-		`INSERT INTO daemon_stats(total_found_urls, total_new_urls, total_found_ports, total_new_ports, scan_time, scan_begin, last_scan_ended, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO daemon_stats(uuid, total_found_urls, total_new_urls, total_found_ports, total_new_ports, scan_time, scan_begin, last_scan_ended, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		stats.UUID,
 		stats.TotalFoundURLs,
 		stats.TotalNewURLs,
 		stats.TotalFoundPorts,
@@ -380,7 +381,8 @@ func (db Database) InsertDaemonStats(stats models.DaemonStats) error {
 
 func (db Database) UpdateDaemonStats(stats models.DaemonStats) error {
 	if _, err := db.connection.Exec(
-		`UPDATE daemon_stats SET total_found_urls = ?, total_new_urls = ?, total_found_ports = ?, total_new_ports = ?, scan_time = ?, scan_begin = ?, last_scan_ended = ?, is_running = ?`,
+		`UPDATE daemon_stats SET uuid = ?, total_found_urls = ?, total_new_urls = ?, total_found_ports = ?, total_new_ports = ?, scan_time = ?, scan_begin = ?, last_scan_ended = ?, is_running = ?`,
+		stats.UUID,
 		stats.TotalFoundURLs,
 		stats.TotalNewURLs,
 		stats.TotalFoundPorts,
@@ -396,11 +398,18 @@ func (db Database) UpdateDaemonStats(stats models.DaemonStats) error {
 	return nil
 }
 
-func (db Database) GetStats() (*models.DaemonStats, error) {
-	var statsStr models.StatsResponse
-	err := db.connection.QueryRow(
-		`SELECT total_found_urls, total_new_urls, total_found_ports, total_new_ports, scan_time, scan_begin, last_scan_ended, is_running FROM daemon_stats`).
-		Scan(
+func (db Database) GetStats() ([]models.DaemonStats, error) {
+	rows, err := db.connection.Query(
+		`SELECT total_found_urls, total_new_urls, total_found_ports, total_new_ports, scan_time, scan_begin, last_scan_ended, is_running FROM daemon_stats`)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get daemon stats: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.DaemonStats
+	for rows.Next() {
+		var statsStr models.StatsResponse
+		if err := rows.Scan(
 			&statsStr.TotalFoundURLs,
 			&statsStr.TotalNewURLs,
 			&statsStr.TotalFoundPorts,
@@ -409,48 +418,50 @@ func (db Database) GetStats() (*models.DaemonStats, error) {
 			&statsStr.ScanBegin,
 			&statsStr.LastScanEnded,
 			&statsStr.IsRunning,
-		)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
+		); err != nil {
+			return nil, fmt.Errorf("Failed to get stats: %w", err)
 		}
 
-		return nil, fmt.Errorf("Failed to get stats: %w", err)
-	}
-
-	parsedScanTime, err := time.ParseDuration(statsStr.ScanTime)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to convert scan_time to duration: %s", statsStr.ScanTime)
-	}
-
-	layout := "2006-01-02 15:04:05.000000000-07:00"
-
-	var parsedLastScanEnded *time.Time
-	if statsStr.LastScanEnded != nil {
-		lastScanEnded, err := time.Parse(layout, *statsStr.LastScanEnded)
+		parsedScanTime, err := time.ParseDuration(statsStr.ScanTime)
 		if err != nil {
-			return nil, fmt.Errorf("Faield to convert last_scan_eded to time: %s", *statsStr.LastScanEnded)
+			return nil, fmt.Errorf("Failed to convert scan_time to duration: %s", statsStr.ScanTime)
 		}
-		parsedLastScanEnded = &lastScanEnded
+
+		layout := "2006-01-02 15:04:05.000000000-07:00"
+
+		var parsedLastScanEnded *time.Time
+		if statsStr.LastScanEnded != nil {
+			lastScanEnded, err := time.Parse(layout, *statsStr.LastScanEnded)
+			if err != nil {
+				return nil, fmt.Errorf("Faield to convert last_scan_eded to time: %s", *statsStr.LastScanEnded)
+			}
+			parsedLastScanEnded = &lastScanEnded
+		}
+
+		parsedScanBegin, err := time.Parse(layout, statsStr.ScanBegin)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to convert scan_begin to time: %s", statsStr.ScanBegin)
+		}
+
+		stats := models.DaemonStats{
+			TotalFoundURLs:  statsStr.TotalFoundURLs,
+			TotalNewURLs:    statsStr.TotalNewURLs,
+			TotalFoundPorts: statsStr.TotalFoundPorts,
+			TotalNewPorts:   statsStr.TotalNewPorts,
+			ScanTime:        parsedScanTime,
+			ScanBegin:       parsedScanBegin,
+			LastScanEnded:   parsedLastScanEnded,
+			IsRunning:       statsStr.IsRunning,
+		}
+
+		results = append(results, stats)
 	}
 
-	parsedScanBegin, err := time.Parse(layout, statsStr.ScanBegin)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to convert scan_begin to time: %s", statsStr.ScanBegin)
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("Rows error when getting stats: %w", err)
 	}
 
-	stats := models.DaemonStats{
-		TotalFoundURLs:  statsStr.TotalFoundURLs,
-		TotalNewURLs:    statsStr.TotalNewURLs,
-		TotalFoundPorts: statsStr.TotalFoundPorts,
-		TotalNewPorts:   statsStr.TotalNewPorts,
-		ScanTime:        parsedScanTime,
-		ScanBegin:       parsedScanBegin,
-		LastScanEnded:   parsedLastScanEnded,
-		IsRunning:       statsStr.IsRunning,
-	}
-
-	return &stats, nil
+	return results, nil
 }
 
 func (db Database) GetBruteForcedByPath(path string, domainUUID string) (*models.BruteForced, error) {

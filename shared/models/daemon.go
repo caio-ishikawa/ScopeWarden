@@ -5,6 +5,7 @@ import (
 )
 
 type DaemonStats struct {
+	UUID string `json:"uuid"`
 	// Represents the total number of found URLs in this current scan
 	TotalFoundURLs int `json:"total_found_urls"`
 	// Represents all new URLs (includes URLs that already existed but were down previously)

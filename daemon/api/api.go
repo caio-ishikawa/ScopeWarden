@@ -372,29 +372,35 @@ func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scanTime := time.Since(stats.ScanBegin)
+	var output []models.StatsResponse
+	for _, stat := range stats {
 
-	var lastScanEnded *string
-	if stats.LastScanEnded != nil {
-		s := *stats.LastScanEnded
-		l := s.String()
-		lastScanEnded = &l
-	}
+		scanTime := time.Since(stat.ScanBegin)
 
-	statsRes := models.StatsResponse{
-		TotalFoundURLs:  stats.TotalFoundURLs,
-		TotalNewURLs:    stats.TotalNewURLs,
-		TotalFoundPorts: stats.TotalFoundPorts,
-		TotalNewPorts:   stats.TotalNewPorts,
-		ScanTime:        scanTime.String(),
-		ScanBegin:       stats.ScanBegin.String(),
-		LastScanEnded:   lastScanEnded,
-		IsRunning:       stats.IsRunning,
+		var lastScanEnded *string
+		if stat.LastScanEnded != nil {
+			s := stat.LastScanEnded
+			l := s.String()
+			lastScanEnded = &l
+		}
+
+		statsRes := models.StatsResponse{
+			TotalFoundURLs:  stat.TotalFoundURLs,
+			TotalNewURLs:    stat.TotalNewURLs,
+			TotalFoundPorts: stat.TotalFoundPorts,
+			TotalNewPorts:   stat.TotalNewPorts,
+			ScanTime:        scanTime.String(),
+			ScanBegin:       stat.ScanBegin.String(),
+			LastScanEnded:   lastScanEnded,
+			IsRunning:       stat.IsRunning,
+		}
+
+		output = append(output, statsRes)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(statsRes); err != nil {
+	if err := json.NewEncoder(w).Encode(output); err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}

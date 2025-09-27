@@ -2,4 +2,5 @@
 *.db
 *.db-wal
 *.db-shm
+*.gau
 bin/
