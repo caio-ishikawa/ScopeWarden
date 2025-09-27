@@ -158,6 +158,7 @@ func NewCLI() (CLI, error) {
 
 func (c *CLI) Init() tea.Cmd { return nil }
 
+// TODO: make tab switch to next table to the right
 func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
@@ -207,6 +208,10 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "q":
 			if m, c, skip := c.handleKeyQ(); !skip {
+				return m, c
+			}
+		case "tab":
+			if m, c, skip := c.handleKeyTab(); !skip {
 				return m, c
 			}
 		case "ctrl+c":
@@ -326,7 +331,6 @@ func (c *CLI) GetDomainRows() ([]table.Row, error) {
 			)
 		}
 
-		// TODO: Fix
 		for _, bruteForced := range domain.BruteForced {
 			row.BruteForced = append(
 				row.BruteForced,

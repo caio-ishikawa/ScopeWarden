@@ -212,6 +212,28 @@ func (c *CLI) handleKeyQ() (tea.Model, tea.Cmd, bool) {
 	return nil, nil, true
 }
 
+// Switch to table to the right
+// TODO: why doesn't this work
+func (c *CLI) handleKeyTab() (tea.Model, tea.Cmd, bool) {
+	if c.state == TargetDomainTable {
+		c.state = PortsTable
+		c.portsTable.SetCursor(0)
+		c.View()
+	}
+	if c.state == PortsTable {
+		c.state = BruteForcedTable
+		c.bruteForcedTable.SetCursor(0)
+		c.View()
+	}
+	if c.state == BruteForcedTable {
+		c.state = TargetDomainTable
+		c.table.SetCursor(c.selectedDomainIdx)
+		c.View()
+	}
+
+	return nil, nil, true
+}
+
 func (c *CLI) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable {
 		if err := c.openURL(c.selectedDomainURL); err != nil {

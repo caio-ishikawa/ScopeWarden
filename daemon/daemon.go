@@ -24,13 +24,14 @@ type ConcurrencySettings struct {
 }
 
 type Daemon struct {
-	db                  store.Database
-	api                 api.API
-	currentScanUUID     string
-	concurrencySettings ConcurrencySettings
-	telegram            modules.TelegramClient
-	stats               models.DaemonStats
-	config              modules.DaemonConfig
+	db                      store.Database
+	api                     api.API
+	currentScanUUID         string
+	concurrencySettings     ConcurrencySettings
+	currentlyProcessingURLs sync.Map
+	telegram                modules.TelegramClient
+	stats                   models.DaemonStats
+	config                  modules.DaemonConfig
 }
 
 func NewDaemon() (Daemon, error) {
@@ -60,7 +61,7 @@ func NewDaemon() (Daemon, error) {
 	maxConcurrentDomainProcessing := 10
 	maxConcurrentBruteForces := 5
 	if config.Global.Intensity == modules.Aggressive {
-		maxConcurrentDomainProcessing = 30
+		maxConcurrentDomainProcessing = 20
 		maxConcurrentBruteForces = 10
 	}
 
@@ -240,11 +241,24 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		return
 	}
 
+	// Update daemon URL stat
 	a.stats.TotalFoundURLs += 1
 	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 		log.Printf("Failed to update stats: %s", err.Error())
 		return
 	}
+
+	// Return early if URL is currently being processed by another routine
+	_, loaded := a.currentlyProcessingURLs.Load(baseURL)
+	if loaded {
+		return
+	}
+
+	// Store URL being processed in sync.Map
+	a.currentlyProcessingURLs.Store(baseURL, struct{}{})
+
+	// Make sure to delete URL from sync.Map before returning
+	defer a.currentlyProcessingURLs.Delete(baseURL)
 
 	// Check if domain exists early in the processing
 	existingDomain, err := a.db.GetDomainByURL(baseURL)
@@ -255,7 +269,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 	// Return early if domain was already processed in this scan
 	if existingDomain != nil && existingDomain.ScanUUID == a.currentScanUUID {
-		//log.Printf("Already processed URL %s - SKIPPING", baseURL)
+		//log.Printf("Skipping already processed URL %s", baseURL)
 		return
 	}
 
@@ -267,16 +281,25 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 	// Make GET request and get fingerprinted technologies
 	responseDetails, err := getResDetails(httpClient, baseURL)
+	foundDomain.StatusCode = responseDetails.statusCode
 	if err != nil {
-		log.Printf("Failed to get response: %s", err.Error())
-
 		// Insert domain where request was unsuccessful, so that next iterations can exit early if it already processed the domain in this scan
-		foundDomain.UUID = uuid.NewString()
-		foundDomain.StatusCode = responseDetails.statusCode
-		if err := a.db.InsertDomainRecord(foundDomain); err != nil {
-			//log.Printf("Failed to insert non-working domain %s: %s", baseURL, err.Error())
+		if existingDomain == nil {
+			foundDomain.UUID = uuid.NewString()
+			if err := a.db.InsertDomainRecord(foundDomain); err != nil {
+				log.Printf("Failed to insert non-working domain %s: %s", baseURL, err.Error())
+				return
+			}
+
 			return
 		}
+
+		foundDomain.UUID = existingDomain.UUID
+		if err := a.db.UpdateDomainRecord(foundDomain); err != nil {
+			log.Printf("Failed to update non-working domain %s: %s", baseURL, err.Error())
+		}
+
+		log.Printf("Failed to get response: %s", err.Error())
 
 		// Return early if request was unsuccessful
 		return

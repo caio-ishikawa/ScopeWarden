@@ -78,12 +78,6 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to get domains for %s", targetUUID), http.StatusInternalServerError)
 	}
 
-	log.Println("================================================================")
-	log.Println(len(domains.Domains))
-	log.Println("================================================================")
-	//log.Println(len(domains.Domains[0].Ports))
-	//log.Println(len(domains.Domains[0].BruteForced))
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(domains); err != nil {
