@@ -14,9 +14,9 @@ ScopeWarden is a self-hostable and configurable automated recon tool with a inte
 ## 📦 Setup & Installation
 #### Pre-installation Setup
 ScopeWarden expects some environment variables to be set before installing:
-    - **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
-    - **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
-    - **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
+- **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
+- **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
+- **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
 
 #### Telegram Notifications Setup
 In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
@@ -48,7 +48,9 @@ ScopeWarden works with targets, scopes and domains:
 - **Scope:** Represents all the scannable URLs for a specific target. A scope can only be related to a single target.
 - **Domains:** Represent all the domains found when scanning a particular scope. The subsequent port scans and brute forcing are done to each domain, as configured in the yaml file.
 
-A scan will start by going over the targets and its scopes. For each scope found, it will run the scan based on the configured toolset (see [Configuration](#Configuration)), and update the DB with the found domains and the associated brute forced paths and found ports. **NOTE:** In order to avoid a lot of noise in the DB, ScopeWarden will only store and process the root URL. E.g. If the configured tool finds `https://example.com/some/path/to/something`, ScopeWarden will only process `https://example.com`. The rationale behind this is that tools often return multiple paths to the same root URL, and most times these paths are not relevant, and will end up making the end results harder to parse through. This also speeds up the scanning by ignoring duplicate root URLs before processing them.
+A scan will start by going over the targets and its scopes. For each scope found, it will run the scan based on the configured toolset (see [Configuration](#Configuration)), and update the DB with the found domains and the associated brute forced paths and found ports. 
+
+**NOTE:** In order to avoid a lot of noise in the DB, ScopeWarden will only store and process the root URL. E.g. If the configured tool finds `https://example.com/some/path/to/something`, ScopeWarden will only process `https://example.com`. The rationale behind this is that tools often return multiple paths to the same root URL, and most times these paths are not relevant, and will end up making the end results harder to parse through. This also speeds up the scanning by ignoring duplicate root URLs before processing them.
 
 ## 🔧 Configuration
 By default, ScopeWarden will not run any tools in the scan. It will continuously loop trying to find the desired configuration yaml file.
@@ -81,35 +83,35 @@ Multiple tools are allowed to be configured under the `tools` section, each with
       - **wordlist (required):** Path to the wordlist to use for that technology. Expects absolute path.
 
 #### Example Configuration
-    ```
-    global:
-      schedule: 12
-      nofity: true
+```
+global:
+  schedule: 12
+  nofity: true
 
-    tools:
-      - id: gau
-        command: 'gau <target>'
-        verbose: false 
-        port_scan:
-          run: true
-          ports:
-            - 21
-            - 22
-            - 53
-            - 5432
-            - 3306
-            - 9092
-        brute_force:
-          run: true
-          command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 30'
-          regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
-          conditions:
-            - technology: 'php'
-              wordlist: 'absolute/path/to/php/wordlist.txt'
-        parser:
-          type: 'realtime'
-          regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
-    ```
+tools:
+  - id: gau
+    command: 'gau <target>'
+    verbose: false 
+    port_scan:
+      run: true
+      ports:
+        - 21
+        - 22
+        - 53
+        - 5432
+        - 3306
+        - 9092
+    brute_force:
+      run: true
+      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 30'
+      regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
+      conditions:
+        - technology: 'php'
+          wordlist: 'absolute/path/to/php/wordlist.txt'
+    parser:
+      type: 'realtime'
+      regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+```
 
 ## 🎯 CLI Usage
 The CLI allows you to add targets and scopes, as well as view the recon results per target in a interactive table.
