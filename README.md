@@ -166,9 +166,9 @@ All navigation keys are displayed in the helper text below the table.
 Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remember to update the README in the PR when a change requires it.
 
 I would especially welcome changes towards these features:
+- **Per-scope rate-limit:** Add a way to configure ScopeWarden to rate-limit requests and brute force attepmts per-scope. Alternatively, add a override option to the tool that will apply a different command based on the scope name.
 - **Allow file output parser for tool:** Add output parser type called 'file' which parses tool output file instead of the real time output in stdout. Ideally it would set the output path to `/tmp` and delete it after processing.
 - **Search and select target on interactive CLI instead of by flags:** E.g `scopewarden` command renders a table with all targets and lets you select the target for the main table.
-- **Per-scope rate-limit:** Add a way to configure ScopeWarden to rate-limit requests and brute force attepmts per-scope.
 - **Web interface**: Add web interface as an alternative to the CLI. I'm not personally interested in this, but I think it would suit other people's workflows a little nicer.
 - **Wayland/Hyprland copy-to-clipboard:** Add a way to copy domains to clipboard, since xclip does not work on wayland. As far as I know there isn't a clipboard tool compatible with both X11 and Wayland, so the CLI should be able to tell what the user is running.
 
