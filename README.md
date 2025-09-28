@@ -1,4 +1,3 @@
-# ScopeWarden
 <div align="center">
     <img src="assets/scopewarden.png" width=250 height=250>
 </div>
