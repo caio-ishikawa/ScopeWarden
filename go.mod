@@ -3,6 +3,7 @@ module github.com/caio-ishikawa/scopewarden
 go 1.24.3
 
 require (
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bobesa/go-domain-util v0.0.0-20190911083921-4033b5f7dd89 // indirect
 	github.com/charmbracelet/bubbles v0.21.0 // indirect

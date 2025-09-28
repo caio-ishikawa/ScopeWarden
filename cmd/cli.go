@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -51,21 +52,37 @@ var (
 			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
 			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("Exit", "q/ctrl+c")),
+		},
+		SearchResultsTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("Exit search results", "q")),
 		},
 		PortsTable: {
 			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
 			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
-			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b/q")),
 		},
 		BruteForcedTable: {
 			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
 			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
-			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b/q")),
 		},
 		SortMode: {
 			key.NewBinding(key.WithKeys("p"), key.WithHelp("Sort by ports", "p")),
 			key.NewBinding(key.WithKeys("b"), key.WithHelp("Sort by brute forced", "b")),
+		},
+		SearchMode: {
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("Exit search", "esc")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Search", "enter")),
 		},
 	}
 )
@@ -74,11 +91,13 @@ type CLIState string
 type OperatingSystem string
 
 const (
-	TargetDomainTable CLIState = "DomainTable"
-	PortsTable        CLIState = "PortState"
-	StatsTable        CLIState = "StatsTable"
-	BruteForcedTable  CLIState = "BruteForcedTable"
-	SortMode          CLIState = "Sort"
+	TargetDomainTable  CLIState = "DomainTable"
+	PortsTable         CLIState = "PortState"
+	StatsTable         CLIState = "StatsTable"
+	BruteForcedTable   CLIState = "BruteForcedTable"
+	SortMode           CLIState = "Sort"
+	SearchMode         CLIState = "Search"
+	SearchResultsTable CLIState = "SearchResultsTable"
 
 	Linux   OperatingSystem = "Linux"
 	MacOS   OperatingSystem = "MacOS"
@@ -97,6 +116,7 @@ type CLI struct {
 	table             table.Model
 	portsTable        table.Model
 	bruteForcedTable  table.Model
+	searchBox         textinput.Model
 	domainMap         DomainRows
 	help              help.Model
 	os                OperatingSystem
@@ -104,9 +124,11 @@ type CLI struct {
 	selectedDomainURL string
 	selectedDomainIdx int
 	domainOffset      int
+	//searchResultOffset int
 	bruteForcedOffset int
 	targetUUID        string
 	state             CLIState
+	isSearching       bool
 }
 
 func NewCLI() (CLI, error) {
@@ -145,12 +167,19 @@ func NewCLI() (CLI, error) {
 		return CLI{}, fmt.Errorf("Unsupported OS: %s", runtime.GOOS)
 	}
 
+	input := textinput.New()
+	input.Placeholder = "Search (press / to focus)"
+	input.CharLimit = 128
+	input.Width = 40
+
 	return CLI{
 		table:             mainTable,
 		portsTable:        portsTable,
 		bruteForcedTable:  bruteForcedTable,
 		domainMap:         map[string]PerDomainRow{},
+		searchBox:         input,
 		state:             TargetDomainTable,
+		isSearching:       false,
 		help:              help.New(),
 		sortBy:            models.SortNone,
 		os:                operatingSystem,
@@ -163,18 +192,34 @@ func NewCLI() (CLI, error) {
 
 func (c *CLI) Init() tea.Cmd { return nil }
 
-// TODO: make tab switch to next table to the right
 func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	if c.state == SearchMode {
+		input, cmd := c.searchBox.Update(msg)
+		c.searchBox = input
+
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "esc":
+				if m, c, skip := c.handleKeyEsc(); !skip {
+					return m, c
+				}
+			case "enter":
+				if m, c, skip := c.handleKeyEnter(); !skip {
+					return m, c
+				}
+			}
+
+		}
+
+		return c, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc":
-			if c.table.Focused() {
-				c.table.Blur()
-			} else {
-				c.table.Focus()
-			}
 		case "l":
 			if m, c, skip := c.handleKeyL(); !skip {
 				return m, c
@@ -219,6 +264,10 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m, c, skip := c.handleKeyTab(); !skip {
 				return m, c
 			}
+		case "/":
+			if m, c, skip := c.handleKeySlash(); !skip {
+				return m, c
+			}
 		case "ctrl+c":
 			return c, tea.Quit
 		case "enter":
@@ -227,6 +276,7 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
+
 	c.table, cmd = c.table.Update(msg)
 
 	return c, cmd
@@ -258,7 +308,7 @@ func (c *CLI) SetTarget(targetName string) error {
 func (c *CLI) RenderURLsTable() error {
 	c.state = TargetDomainTable
 
-	rows, err := c.GetDomainRows()
+	rows, err := c.GetDomainRows(nil)
 	if err != nil {
 		return fmt.Errorf("Error getting domain rows: %w", err)
 	}
@@ -288,6 +338,35 @@ func (c *CLI) RenderURLsTable() error {
 }
 
 func (c *CLI) RenderStatsTable() error {
+	c.state = StatsTable
+
+	stats, err := GetStats()
+	if err != nil {
+		return fmt.Errorf("Failed to get stats: %w", err)
+	}
+
+	var rows []table.Row
+	for _, stat := range stats {
+		rows = append(rows, table.Row{
+			strconv.Itoa(stat.TotalFoundURLs),
+			strconv.Itoa(stat.TotalNewURLs),
+			strconv.Itoa(stat.TotalFoundPorts),
+			strconv.Itoa(stat.TotalNewPorts),
+			stat.ScanTime,
+			stat.ScanBegin,
+			strconv.FormatBool(stat.IsRunning),
+		})
+	}
+
+	c.table.SetHeight(tableHeightOne)
+	c.table.SetColumns(StatsColumns)
+	c.table.SetRows(rows)
+
+	fmt.Println(c.View())
+	return nil
+}
+
+func (c *CLI) RenderSearchModal() error {
 	c.state = StatsTable
 
 	stats, err := GetStats()

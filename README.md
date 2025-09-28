@@ -164,21 +164,11 @@ Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remem
 
 I would especially welcome changes towards these features:
 - **Allow file output parser for tool:** Add output parser type called 'file' which parses tool output file instead of the real time output in stdout. Ideally it would set the output path to `/tmp` and delete it after processing.
+- **Search and select target on interactive CLI instead of by flags:** E.g `scopewarden` command renders a table with all targets and lets you select the target for the main table.
 - **Per-scope rate-limit:** Add a way to configure ScopeWarden to rate-limit requests and brute force attepmts per-scope.
-- **Web interface**: Add web interface as an alternative to the CLI.
+- **Web interface**: Add web interface as an alternative to the CLI. I'm not personally interested in this, but I think it would suit other people's workflows a little nicer.
 
 ## TODO
-- [x] Check if the found domain exists early instead of processing first
-- [x] Refactor daemon code for shorter parsing functions
-- [x] Add aggressive/conservative global option (aggressive uses 30 on the url semaphore and 15 on the brute force one; conservative uses 10 and 5)
-- [x] Wait for brute force domains after running scanScopes(), to avoid blocking the URL processing
-- [x] Add enable/disable for scopes.
-- [x] Add command to enabe/disable/delete scopes
-- [x] Fix tables - port and bruteforced do not display data anymore even though the DB does
-- [x] Add amount of brute forced domains in domain table
-- [x] Paginate bruteforce table in CLI
-- [x] Have 'q' go back to main table instead of quitting the CLI from the ports/bruteforce table
-- [x] Have 'Enter' go to the domain URL in main table and to the bruteforced path in the bruteforce table
-- [ ] Test Makefile installation
+- [x] Search by domain
 - [ ] Show total pages in domains table
-- [x] Copy domain using 'c' 
+- [ ] Test Makefile installation

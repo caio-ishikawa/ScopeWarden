@@ -149,8 +149,8 @@ func (db Database) UpdateScope(scope models.Scope) error {
 	return nil
 }
 
-func (db Database) GetDomainsByTarget(limit, offset int, sortBy models.DomainSortBy, targetUUID string) (models.DomainListResponse, error) {
-	query := fmt.Sprintf(`
+func (db Database) GetDomainsByTarget(limit, offset int, sortBy models.DomainSortBy, targetUUID string, urlSubstr string) (models.DomainListResponse, error) {
+	query := `
 	SELECT 
 		d.uuid,
 		d.scan_uuid,
@@ -169,13 +169,19 @@ func (db Database) GetDomainsByTarget(limit, offset int, sortBy models.DomainSor
 		FROM bruteforced
 		GROUP BY domain_uuid
 	) b ON b.domain_uuid = d.uuid
-	WHERE d.target_uuid = ? AND d.status_code != 0`)
+	WHERE d.target_uuid = ? AND d.status_code != 0`
+
+	if urlSubstr != "" {
+		query = fmt.Sprintf("%s AND d.url LIKE '%%%s%%'", query, urlSubstr)
+	}
 
 	if sortBy != models.SortNone {
 		query = fmt.Sprintf("%s ORDER BY %s DESC", query, sortBy)
 	}
 
-	query = fmt.Sprintf("%s LIMIT %v OFFSET %v", query, limit, offset)
+	if urlSubstr != "" {
+		query = fmt.Sprintf("%s LIMIT %v OFFSET %v", query, limit, offset)
+	}
 
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
@@ -381,8 +387,7 @@ func (db Database) InsertDaemonStats(stats models.DaemonStats) error {
 
 func (db Database) UpdateDaemonStats(stats models.DaemonStats) error {
 	if _, err := db.connection.Exec(
-		`UPDATE daemon_stats SET uuid = ?, total_found_urls = ?, total_new_urls = ?, total_found_ports = ?, total_new_ports = ?, scan_time = ?, scan_begin = ?, last_scan_ended = ?, is_running = ?`,
-		stats.UUID,
+		`UPDATE daemon_stats SET total_found_urls = ?, total_new_urls = ?, total_found_ports = ?, total_new_ports = ?, scan_time = ?, scan_begin = ?, last_scan_ended = ?, is_running = ? WHERE uuid = ?`,
 		stats.TotalFoundURLs,
 		stats.TotalNewURLs,
 		stats.TotalFoundPorts,
@@ -391,6 +396,7 @@ func (db Database) UpdateDaemonStats(stats models.DaemonStats) error {
 		stats.ScanBegin,
 		stats.LastScanEnded,
 		stats.IsRunning,
+		stats.UUID,
 	); err != nil {
 		return fmt.Errorf("Failed to update stats: %w", err)
 	}

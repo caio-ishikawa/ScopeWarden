@@ -13,8 +13,13 @@ import (
 )
 
 // Gets domains and creates map for domain to associated rows (ports & bruteforced)
-func (c *CLI) GetDomainRows() ([]table.Row, error) {
-	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy)
+func (c *CLI) GetDomainRows(substr *string) ([]table.Row, error) {
+	var search string
+	if substr != nil {
+		search = *substr
+	}
+
+	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy, search)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get domains rows: %w", err)
 	}
@@ -80,8 +85,8 @@ func (c *CLI) GetBruteForcedRows(assets []models.BruteForced) ([]table.Row, erro
 	return rows, nil
 }
 
-func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy) (models.DomainListResponse, error) {
-	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v&sort_by=%s", apiURL, target, tableLimit, offset, sortBy)
+func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy, substr string) (models.DomainListResponse, error) {
+	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v&sort_by=%s&url=%s", apiURL, target, tableLimit, offset, sortBy, substr)
 	res, err := http.Get(url)
 	if err != nil {
 		return models.DomainListResponse{}, fmt.Errorf("Could not get domains for target %s: %w", target, err)

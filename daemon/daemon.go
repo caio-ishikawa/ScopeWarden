@@ -78,7 +78,6 @@ func NewDaemon() (Daemon, error) {
 		telegram:            telegram,
 		config:              config,
 		stats: models.DaemonStats{
-			UUID:            uuid.NewString(),
 			TotalFoundURLs:  0,
 			TotalNewURLs:    0,
 			TotalFoundPorts: 0,
@@ -101,6 +100,7 @@ func (a *Daemon) RunDaemon() {
 		}
 		a.config = config
 
+		// We should get stats from the db
 		// Do not scan unless it's been enough time since the last scan ended or if the last scan took longer than the schedule
 		if a.stats.LastScanEnded != nil &&
 			(time.Since(*a.stats.LastScanEnded) < time.Duration(a.config.Global.Schedule)*time.Hour ||
@@ -122,15 +122,18 @@ func (a *Daemon) RunDaemon() {
 			continue
 		}
 
+		// Set initial stats
+		a.stats.UUID = uuid.NewString()
+		a.stats.ScanBegin = time.Now()
+		a.stats.IsRunning = true
 		// Insert first scan stats
 		if err := a.db.InsertDaemonStats(a.stats); err != nil {
 			log.Fatalf("Failed to insert initial daemon stats: %s", err.Error())
 		}
 
+		log.Printf("Starting scan %s", a.stats.UUID)
+
 		// Set stats for current scan
-		log.Println("Starting scan")
-		a.stats.ScanBegin = time.Now()
-		a.stats.IsRunning = true
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 			log.Printf("%s", err.Error())
 		}
@@ -149,9 +152,6 @@ func (a *Daemon) RunDaemon() {
 		if err := a.db.UpdateDaemonStats(a.stats); err != nil {
 			log.Printf("%s", err.Error())
 		}
-
-		// Set new scan UUID at the end of the scan
-		a.stats.UUID = uuid.NewString()
 	}
 }
 
@@ -198,7 +198,10 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 
 // Updates current scan time and returns daemon stats
 func (a *Daemon) Stats() models.DaemonStats {
-	a.stats.ScanTime = time.Since(a.stats.ScanBegin)
+	if a.stats.IsRunning {
+		a.stats.ScanTime = time.Since(a.stats.ScanBegin)
+	}
+
 	return a.stats
 }
 
@@ -238,7 +241,7 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	// Update daemon URL stat
 	a.stats.TotalFoundURLs += 1
 	if err := a.db.UpdateDaemonStats(a.stats); err != nil {
-		log.Printf("Failed to update stats: %s", err.Error())
+		log.Printf("Failed to update stats %s: %s", a.stats.UUID, err.Error())
 		return
 	}
 

@@ -45,7 +45,7 @@ var (
 )
 
 // Updates tables styles to represent currently active table
-// TODO: This needs to not render other tables if we're rendering the stats only
+// TODO: THis needs to set the styles for the search box if CLIState == Search
 func (c *CLI) updateStyles() string {
 	// TODO: There has to be a better way to do this, but I can't think of it right now
 	selectedStyle := table.DefaultStyles()
@@ -98,7 +98,10 @@ func (c *CLI) updateStyles() string {
 	case StatsTable:
 		c.table.SetStyles(selectedStyle)
 		return DefaultBoxStyles.Active.Render(c.table.View())
-	// For undefined state or TargetDomainTable
+	case SearchMode:
+		searchBox := DefaultBoxStyles.Active.Render(c.searchBox.View())
+		return searchBox
+	// For undefined TargetDomainTable or SearchResultsTable
 	default:
 		c.table.SetStyles(selectedStyle)
 		c.portsTable.SetStyles(inactiveStyle)

@@ -72,7 +72,9 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 		sortBy = models.SortNone
 	}
 
-	domains, err := a.db.GetDomainsByTarget(limit, offset, sortBy, targetUUID)
+	urlSubstrQuery := query.Get("url")
+
+	domains, err := a.db.GetDomainsByTarget(limit, offset, sortBy, targetUUID, urlSubstrQuery)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, fmt.Sprintf("Failed to get domains for %s", targetUUID), http.StatusInternalServerError)
@@ -191,6 +193,11 @@ func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 	target, err := a.db.GetTargetByName(req.TargetName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Could not get target by name %s", req.TargetName), http.StatusBadRequest)
+		return
+	}
+
+	if target == nil {
+		http.Error(w, fmt.Sprintf("Could not find target by name %s", req.TargetName), http.StatusNotFound)
 		return
 	}
 

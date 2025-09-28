@@ -9,9 +9,9 @@ import (
 )
 
 func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		c.domainOffset = c.domainOffset + tableLimit
-		rows, err := c.GetDomainRows()
+		rows, err := c.GetDomainRows(nil)
 		if err != nil {
 			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
 			return c, tea.Quit, false
@@ -43,11 +43,11 @@ func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyH() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		if c.domainOffset >= tableLimit {
 			c.domainOffset = c.domainOffset - tableLimit
 
-			rows, err := c.GetDomainRows()
+			rows, err := c.GetDomainRows(nil)
 			if err != nil {
 				tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
 				return c, tea.Quit, false
@@ -82,7 +82,7 @@ func (c *CLI) handleKeyH() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyJ() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		c.table.MoveDown(1)
 		c.selectedDomainURL = c.table.SelectedRow()[3]
 		if c.selectedDomainIdx < tableLimit {
@@ -103,7 +103,7 @@ func (c *CLI) handleKeyJ() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyK() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		c.table.MoveUp(1)
 		c.selectedDomainURL = c.table.SelectedRow()[3]
 		if c.selectedDomainIdx > 0 {
@@ -124,14 +124,14 @@ func (c *CLI) handleKeyK() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == BruteForcedTable || c.state == SearchResultsTable {
 		c.state = PortsTable
 		c.portsTable.SetCursor(0)
 	}
 
 	if c.state == SortMode {
 		c.sortBy = models.SortPorts
-		rows, err := c.GetDomainRows()
+		rows, err := c.GetDomainRows(nil)
 		if err != nil {
 			return c, tea.Quit, false
 		}
@@ -148,7 +148,7 @@ func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyA() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == PortsTable || c.state == SearchResultsTable {
 		c.state = BruteForcedTable
 		c.bruteForcedTable.SetCursor(0)
 	}
@@ -159,21 +159,28 @@ func (c *CLI) handleKeyA() (tea.Model, tea.Cmd, bool) {
 func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
 	// Go back to URL table from other tables
 	if c.state == PortsTable || c.state == BruteForcedTable {
-		rows, err := c.GetDomainRows()
+		searchInput := c.searchBox.Value()
+		rows, err := c.GetDomainRows(&searchInput)
 		if err != nil {
 			return c, tea.Quit, false
 		}
 
-		c.state = TargetDomainTable
+		if c.isSearching {
+			c.state = SearchResultsTable
+		} else {
+			c.state = TargetDomainTable
+		}
 
 		// Render the URL rows from previously recorded offset
 		c.table.SetColumns(URLColumns)
 		c.table.SetRows(rows)
 		c.table.SetCursor(c.selectedDomainIdx)
+
+		return nil, nil, true
 	}
 	if c.state == SortMode {
 		c.sortBy = models.SortBruteForced
-		rows, err := c.GetDomainRows()
+		rows, err := c.GetDomainRows(nil)
 		if err != nil {
 			return c, tea.Quit, false
 		}
@@ -184,6 +191,26 @@ func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
 		c.table.SetColumns(URLColumns)
 		c.table.SetRows(rows)
 		c.table.SetCursor(c.selectedDomainIdx)
+
+		return nil, nil, true
+	}
+	if c.state == SearchResultsTable {
+		// Reset search input
+		c.searchBox.SetValue("")
+		c.state = TargetDomainTable
+		c.isSearching = false
+
+		rows, err := c.GetDomainRows(nil)
+		if err != nil {
+			return c, tea.Quit, false
+		}
+
+		// Render the URL rows from previously recorded offset
+		c.table.SetColumns(URLColumns)
+		c.table.SetRows(rows)
+		c.table.SetCursor(c.selectedDomainIdx)
+
+		return nil, nil, true
 	}
 
 	return nil, nil, true
@@ -191,10 +218,10 @@ func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
 
 func (c *CLI) handleKeyQ() (tea.Model, tea.Cmd, bool) {
 	// Go back to URL table from other tables
-	if c.state == PortsTable || c.state == BruteForcedTable {
+	if c.state == PortsTable || c.state == BruteForcedTable || c.state == SearchResultsTable {
 		c.bruteForcedOffset = 0
 
-		rows, err := c.GetDomainRows()
+		rows, err := c.GetDomainRows(nil)
 		if err != nil {
 			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
 			return c, tea.Quit, false
@@ -232,7 +259,7 @@ func (c *CLI) handleKeyTab() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		if err := c.openURL(c.selectedDomainURL); err != nil {
 			tea.Println(err.Error())
 		}
@@ -253,6 +280,21 @@ func (c *CLI) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		if err != nil {
 			tea.Println(err.Error())
 		}
+	}
+	if c.state == SearchMode {
+		c.domainOffset = 0
+		searchValue := c.searchBox.Value()
+		rows, err := c.GetDomainRows(&searchValue)
+		if err != nil {
+			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
+			return c, tea.Quit, false
+		}
+
+		c.state = SearchResultsTable
+		c.table.SetColumns(URLColumns)
+		c.table.SetRows(rows)
+		c.table.SetCursor(0)
+		c.isSearching = true
 	}
 
 	return nil, nil, true
@@ -288,6 +330,23 @@ func (c *CLI) handleKeyS() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable {
 		c.state = SortMode
 	}
+	return nil, nil, true
+}
+
+func (c *CLI) handleKeySlash() (tea.Model, tea.Cmd, bool) {
+	// TODO: Render new search input box
+	c.state = SearchMode
+	c.searchBox.SetValue("")
+	c.searchBox.Focus()
+
+	return nil, nil, true
+}
+
+func (c *CLI) handleKeyEsc() (tea.Model, tea.Cmd, bool) {
+	if c.state == SearchMode {
+		c.state = TargetDomainTable
+	}
+
 	return nil, nil, true
 }
 
