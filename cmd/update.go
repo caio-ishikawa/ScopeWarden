@@ -256,6 +256,10 @@ func (c *CLI) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		}
 	}
 	if c.state == BruteForcedTable {
+		if len(c.bruteForcedTable.SelectedRow()) == 0 {
+			return nil, nil, true
+		}
+
 		bruteForced := c.bruteForcedTable.SelectedRow()[0]
 		var err error
 

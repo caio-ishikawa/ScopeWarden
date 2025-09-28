@@ -60,6 +60,7 @@ var (
 		SortMode: {
 			key.NewBinding(key.WithKeys("p"), key.WithHelp("Sort by Ports", "p")),
 			key.NewBinding(key.WithKeys("a"), key.WithHelp("Sort by Assets", "a")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to Domains", "b")),
 		},
 		SearchMode: {
 			key.NewBinding(key.WithKeys("esc"), key.WithHelp("Exit search", "esc")),
