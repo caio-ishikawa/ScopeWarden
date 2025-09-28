@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/caio-ishikawa/scopewarden/shared/models"
@@ -179,9 +180,7 @@ func (db Database) GetDomainsByTarget(limit, offset int, sortBy models.DomainSor
 		query = fmt.Sprintf("%s ORDER BY %s DESC", query, sortBy)
 	}
 
-	if urlSubstr != "" {
-		query = fmt.Sprintf("%s LIMIT %v OFFSET %v", query, limit, offset)
-	}
+	query = fmt.Sprintf("%s LIMIT %v OFFSET %v", query, limit, offset)
 
 	rows, err := db.connection.Query(query, targetUUID)
 	if err != nil {
@@ -204,23 +203,20 @@ func (db Database) GetDomainsByTarget(limit, offset int, sortBy models.DomainSor
 		return models.DomainListResponse{}, fmt.Errorf("Rows error when getting domain: %w", err)
 	}
 
-	for _, domain := range results.Domains {
+	for i, domain := range results.Domains {
 		ports, err := db.GetPortByDomain(domain.UUID)
 		if err != nil {
 			return models.DomainListResponse{}, err
 		}
 
-		domain.Ports = ports
+		results.Domains[i].Ports = ports
 
 		bruteForced, err := db.GetBruteForcedByDomain(domain.UUID, limit, 0)
 		if err != nil {
 			return models.DomainListResponse{}, err
 		}
 
-		domain.BruteForced = bruteForced
-
-		results.Domains = append(results.Domains, domain)
-
+		results.Domains[i].BruteForced = bruteForced
 	}
 
 	return results, nil

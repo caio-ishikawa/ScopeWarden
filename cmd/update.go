@@ -16,6 +16,7 @@ func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
 			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
 			return c, tea.Quit, false
 		}
+
 		c.table.SetRows(rows)
 	}
 	if c.state == BruteForcedTable {
@@ -36,7 +37,6 @@ func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
 		c.table.SetRows(rows)
 
 		c.selectedDomainIdx = 0
-		//helpView := c.help.View("")
 	}
 
 	return nil, nil, true
@@ -131,6 +131,7 @@ func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
 
 	if c.state == SortMode {
 		c.sortBy = models.SortPorts
+		c.domainOffset = 0
 
 		searchInput := c.searchBox.Value()
 		rows, err := c.GetDomainRows(&searchInput)
@@ -156,6 +157,7 @@ func (c *CLI) handleKeyA() (tea.Model, tea.Cmd, bool) {
 	}
 	if c.state == SortMode {
 		c.sortBy = models.SortBruteForced
+		c.domainOffset = 0
 
 		searchInput := c.searchBox.Value()
 		rows, err := c.GetDomainRows(&searchInput)
