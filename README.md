@@ -1,9 +1,13 @@
+# ScopeWarden
 <div align="center">
-    <img src="assets/scopewarden2.png">
+    <img src="assets/scopewarden.png">
 </div>
 
 ## 💻 Introduction
 ScopeWarden is a self-hostable and configurable automated recon tool with a interactive CLI table for going through the results. It allows for flexible automation of recon workflows without relying on any specific tool.
+<div align="center">
+    <img src="assets/scopewarden2.png">
+</div>
 
 ## ✨ Features
 - **Run any recon tool:** The yaml configuration file allows you to set any command for the scan to run, and a way to filter results such that only the relevant output gets considered.
