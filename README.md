@@ -197,6 +197,7 @@ The first table displayed when running -t is the domains table. It shows all dom
 - **[C]:** Copy selected domain URL to clipboard.
 - **[S+A, S+P]:** Sort by highest numer of assets and ports respectively.
 - **[/]:** Open search input. Can filter results by URL.
+- **[Esc]:** Exit search.
 - **[Enter]:** Open the selected URL in the default browser. Can only be used in the domains or assets table.
 
 All navigation keys are displayed in the helper text below the table.
