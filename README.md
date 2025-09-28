@@ -29,7 +29,7 @@ In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and
 #### Installing Daeomn/API
 1. Clone the repository.
 2. In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
-3. If you want the daemon to run as a service in Linux, run `sudo make attach-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
+3. If you want the daemon to run as a service in Linux, run `sudo make install-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
 4. If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
 
 #### Installing CLI
