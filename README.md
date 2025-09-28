@@ -20,8 +20,8 @@ ScopeWarden expects some environment variables to be set before installing:
 
 #### Telegram Notifications Setup
 In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
-    - **Set up bot token:** https://core.telegram.org/bots/features#botfather
-    - **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
+- **Set up bot token:** https://core.telegram.org/bots/features#botfather
+- **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
 
 #### Installing Daeomn/API
 1. Clone the repository.
