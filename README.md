@@ -215,6 +215,3 @@ I would especially welcome changes towards these features:
 - **Web interface**: Add web interface as an alternative to the CLI. I'm not personally interested in this, but I think it would suit other people's workflows a little nicer.
 - **Wayland/Hyprland copy-to-clipboard:** Add a way to copy domains to clipboard, since xclip does not work on wayland. As far as I know there isn't a clipboard tool compatible with both X11 and Wayland, so the CLI should be able to tell what the user is running.
 
-## TODO
-- [ ] Test Makefile installation
-- [ ] Check if scope is enabled before scanning....
