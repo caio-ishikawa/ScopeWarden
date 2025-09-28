@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="assets/scopewarden.gif" height=400>
+    <img src="assets/scopewarden2.png">
 </div>
 
 ## 💻 Introduction
