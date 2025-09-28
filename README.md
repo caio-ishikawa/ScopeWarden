@@ -39,7 +39,6 @@ In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and
 - [SQLite](https://sqlite.org/): To store scanning results.
 - [Nmap](https://nmap.org/): Not necessary if ScopeWarden is not configured to do automated port scans.
 - [xclip](https://github.com/astrand/xclip): To copy URLs to the clipboard on Linux distros using X11.
-- [wl-clipboard](https://github.com/bugaevc/wl-clipboard): To copy URLs to the clipboard on Linux distros using Wayland.
 - A cool terminal theme 😎
 
 ## ❓ How it works
@@ -151,13 +150,17 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
 
 #### Navigating interactive table:
 The first table displayed when running -t is the domains table. It shows all domains found when running the configured tools and the status code it received when testing the domain. To navigate the table:
-- **[J,K]:** Used for naviating up and down the tables
-- **[H,L]:** Used for going back and forward 1 page
-- **[P]:** Used to switch to the ports table. It displays the ports found for the selected domain when running the configured port scan and their respective port states. 
-- **[A]:** Used to show the results of the brute forced results for the selected domain.
-- **[B]:** Used to go back to the main table.
-- **[C]:** Used to copy selected domain URL to clipboard.
-- **[Enter]:** Used to open the selected URL in the default browser. Can only be used in the domains or brute force table.
+- **[J,K]:** Naviating up and down the tables.
+- **[H,L]:** Go back and forward 1 page.
+- **[P]:** Switch to the ports table. It displays the ports found for the selected domain when running the configured port scan and their respective port states. 
+- **[A]:** Switch to the Assets table. It displays the found assets during the configured brute force attepmts.
+- **[B]:** Go back to the main table.
+- **[C]:** Copy selected domain URL to clipboard.
+- **[S+A, S+P]:** Sort by highest numer of assets and ports respectively.
+- **[/]:** Open search input. Can filter results by URL.
+- **[Enter]:** Open the selected URL in the default browser. Can only be used in the domains or assets table.
+
+All navigation keys are displayed in the helper text below the table.
 
 ## Contributing
 Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remember to update the README in the PR when a change requires it.
@@ -167,6 +170,7 @@ I would especially welcome changes towards these features:
 - **Search and select target on interactive CLI instead of by flags:** E.g `scopewarden` command renders a table with all targets and lets you select the target for the main table.
 - **Per-scope rate-limit:** Add a way to configure ScopeWarden to rate-limit requests and brute force attepmts per-scope.
 - **Web interface**: Add web interface as an alternative to the CLI. I'm not personally interested in this, but I think it would suit other people's workflows a little nicer.
+- **Wayland/Hyprland copy-to-clipboard:** Add a way to copy domains to clipboard, since xclip does not work on wayland. As far as I know there isn't a clipboard tool compatible with both X11 and Wayland, so the CLI should be able to tell what the user is running.
 
 ## TODO
 - [x] Search by domain
