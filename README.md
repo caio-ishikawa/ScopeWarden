@@ -96,8 +96,6 @@ global:
 tools:
   - id: gau
     command: 'gau <target>'
-    allow_subs: '--subs'
-    disallow_subs: ''
     verbose: false 
     port_scan:
       run: true
@@ -136,8 +134,6 @@ tools:
     
   - id: waymore
     command: 'waymore -i <target>'
-    allow_subs: ''
-    disallow_subs: '--no-subs'
     verbose: false
     port_scan:
       run: true
