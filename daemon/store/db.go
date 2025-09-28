@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/caio-ishikawa/scopewarden/shared/models"
@@ -56,7 +55,7 @@ func (db Database) UpdateTargetEnabled(targetName string, enabled bool) error {
 
 func (db Database) GetTarget(uuid string) (*models.Target, error) {
 	var target models.Target
-	err := db.connection.QueryRow(`SELECT uuid, name FROM target WHERE uuid = ?`, uuid).Scan(&target.UUID, &target.Name)
+	err := db.connection.QueryRow(`SELECT uuid, name, enabled FROM target WHERE uuid = ?`, uuid).Scan(&target.UUID, &target.Name, &target.Enabled)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

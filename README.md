@@ -158,8 +158,10 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
 ```
   -dT string
         Disable target (<target_name>)
+  -eT string
+        Enable target (<target_name>)
   -iS string
-        Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<true/false>,<scope_url>)
+        Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<scope_url>)
   -iT string
         Insert target (<target_name>)
   -s    Show stats
@@ -214,6 +216,5 @@ I would especially welcome changes towards these features:
 - **Wayland/Hyprland copy-to-clipboard:** Add a way to copy domains to clipboard, since xclip does not work on wayland. As far as I know there isn't a clipboard tool compatible with both X11 and Wayland, so the CLI should be able to tell what the user is running.
 
 ## TODO
-- [x] Search by domain
-- [ ] Show total pages in domains table
 - [ ] Test Makefile installation
+- [ ] Check if scope is enabled before scanning....

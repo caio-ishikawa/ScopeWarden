@@ -163,6 +163,12 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 			continue
 		}
 
+		// Skip scopes for disabled targets
+		if !target.Enabled {
+			log.Printf("Skipping disabled target")
+			continue
+		}
+
 		if target == nil {
 			log.Printf("Failed to scan scope: Could not find target with UUID %s", scope.TargetUUID)
 			continue
@@ -330,19 +336,17 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		return
 	}
 
-	// Update and notify if staus code has changed since last run
-	if existingDomain.StatusCode != responseDetails.statusCode {
-		foundDomain.UUID = existingDomain.UUID
-		foundDomain.LastUpdated = time.Now().String()
-
-		if err := a.updateExistingDomain(foundDomain, *existingDomain, notification); err != nil {
-			log.Printf("Failed to update existing domain: %s", err.Error())
-			return
-		}
-
-		a.portScan(input.Tool, foundDomain, scope, target)
-		a.bruteForce(input.Tool, foundDomain, scope, responseDetails.technologies)
+	// Update existin domain with current scan UUID
+	foundDomain.UUID = existingDomain.UUID
+	foundDomain.LastUpdated = time.Now().String()
+	foundDomain.ScanUUID = a.stats.UUID
+	if err := a.updateExistingDomain(foundDomain, *existingDomain, notification); err != nil {
+		log.Printf("Failed to update existing domain: %s", err.Error())
+		return
 	}
+
+	a.portScan(input.Tool, foundDomain, scope, target)
+	a.bruteForce(input.Tool, foundDomain, scope, responseDetails.technologies)
 
 	return
 }
