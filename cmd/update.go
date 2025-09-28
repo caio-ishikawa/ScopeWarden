@@ -131,7 +131,9 @@ func (c *CLI) handleKeyP() (tea.Model, tea.Cmd, bool) {
 
 	if c.state == SortMode {
 		c.sortBy = models.SortPorts
-		rows, err := c.GetDomainRows(nil)
+
+		searchInput := c.searchBox.Value()
+		rows, err := c.GetDomainRows(&searchInput)
 		if err != nil {
 			return c, tea.Quit, false
 		}
@@ -152,13 +154,9 @@ func (c *CLI) handleKeyA() (tea.Model, tea.Cmd, bool) {
 		c.state = BruteForcedTable
 		c.bruteForcedTable.SetCursor(0)
 	}
+	if c.state == SortMode {
+		c.sortBy = models.SortBruteForced
 
-	return nil, nil, true
-}
-
-func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
-	// Go back to URL table from other tables
-	if c.state == PortsTable || c.state == BruteForcedTable {
 		searchInput := c.searchBox.Value()
 		rows, err := c.GetDomainRows(&searchInput)
 		if err != nil {
@@ -178,14 +176,24 @@ func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
 
 		return nil, nil, true
 	}
-	if c.state == SortMode {
-		c.sortBy = models.SortBruteForced
-		rows, err := c.GetDomainRows(nil)
+
+	return nil, nil, true
+}
+
+func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
+	// Go back to URL table from other tables
+	if c.state == PortsTable || c.state == BruteForcedTable || c.state == SortMode {
+		searchInput := c.searchBox.Value()
+		rows, err := c.GetDomainRows(&searchInput)
 		if err != nil {
 			return c, tea.Quit, false
 		}
 
-		c.state = TargetDomainTable
+		if c.isSearching {
+			c.state = SearchResultsTable
+		} else {
+			c.state = TargetDomainTable
+		}
 
 		// Render the URL rows from previously recorded offset
 		c.table.SetColumns(URLColumns)
@@ -195,10 +203,10 @@ func (c *CLI) handleKeyB() (tea.Model, tea.Cmd, bool) {
 		return nil, nil, true
 	}
 	if c.state == SearchResultsTable {
-		// Reset search input
+		// Reset search input and state
 		c.searchBox.SetValue("")
-		c.state = TargetDomainTable
 		c.isSearching = false
+		c.state = TargetDomainTable
 
 		rows, err := c.GetDomainRows(nil)
 		if err != nil {
@@ -235,25 +243,6 @@ func (c *CLI) handleKeyQ() (tea.Model, tea.Cmd, bool) {
 	} else {
 		return c, tea.Quit, false
 	}
-
-	return nil, nil, true
-}
-
-// Switch to table to the right
-// TODO: why doesn't this work
-func (c *CLI) handleKeyTab() (tea.Model, tea.Cmd, bool) {
-	//if c.state == TargetDomainTable {
-	//	c.state = PortsTable
-	//	c.portsTable.SetCursor(0)
-	//}
-	//if c.state == PortsTable {
-	//	c.state = BruteForcedTable
-	//	c.bruteForcedTable.SetCursor(0)
-	//}
-	//if c.state == BruteForcedTable {
-	//	c.state = TargetDomainTable
-	//	c.table.SetCursor(c.selectedDomainIdx)
-	//}
 
 	return nil, nil, true
 }
@@ -327,14 +316,14 @@ func (c *CLI) handleKeyC() (tea.Model, tea.Cmd, bool) {
 }
 
 func (c *CLI) handleKeyS() (tea.Model, tea.Cmd, bool) {
-	if c.state == TargetDomainTable {
+	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		c.state = SortMode
 	}
+
 	return nil, nil, true
 }
 
 func (c *CLI) handleKeySlash() (tea.Model, tea.Cmd, bool) {
-	// TODO: Render new search input box
 	c.state = SearchMode
 	c.searchBox.SetValue("")
 	c.searchBox.Focus()

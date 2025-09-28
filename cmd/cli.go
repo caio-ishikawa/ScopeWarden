@@ -43,48 +43,6 @@ var (
 	BruteForcedColumns = []table.Column{
 		{Title: "Assets", Width: 25},
 	}
-
-	keyMaps = map[CLIState][]key.Binding{
-		TargetDomainTable: {
-			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
-			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
-			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
-			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
-			key.NewBinding(key.WithKeys("q"), key.WithHelp("Exit", "q/ctrl+c")),
-		},
-		SearchResultsTable: {
-			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
-			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
-			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
-			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
-			key.NewBinding(key.WithKeys("q"), key.WithHelp("Exit search results", "q")),
-		},
-		PortsTable: {
-			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
-			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
-			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to brute forced", "a")),
-			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b/q")),
-		},
-		BruteForcedTable: {
-			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
-			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
-			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b/q")),
-		},
-		SortMode: {
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("Sort by ports", "p")),
-			key.NewBinding(key.WithKeys("b"), key.WithHelp("Sort by brute forced", "b")),
-		},
-		SearchMode: {
-			key.NewBinding(key.WithKeys("esc"), key.WithHelp("Exit search", "esc")),
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Search", "enter")),
-		},
-	}
 )
 
 type CLIState string
@@ -167,6 +125,19 @@ func NewCLI() (CLI, error) {
 		return CLI{}, fmt.Errorf("Unsupported OS: %s", runtime.GOOS)
 	}
 
+	helpFooter := help.New()
+	helpFooter.Styles = help.Styles{
+		ShortKey: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(grey2)),
+		ShortDesc: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(green)),
+
+		FullKey: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(grey2)),
+		FullDesc: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(green)),
+	}
+
 	input := textinput.New()
 	input.Placeholder = "Search (press / to focus)"
 	input.CharLimit = 128
@@ -180,7 +151,7 @@ func NewCLI() (CLI, error) {
 		searchBox:         input,
 		state:             TargetDomainTable,
 		isSearching:       false,
-		help:              help.New(),
+		help:              helpFooter,
 		sortBy:            models.SortNone,
 		os:                operatingSystem,
 		domainOffset:      0,
@@ -258,10 +229,6 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "q":
 			if m, c, skip := c.handleKeyQ(); !skip {
-				return m, c
-			}
-		case "tab":
-			if m, c, skip := c.handleKeyTab(); !skip {
 				return m, c
 			}
 		case "/":

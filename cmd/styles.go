@@ -4,6 +4,7 @@ import (
 	//"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -11,7 +12,8 @@ const (
 	green = "#A7C080"
 	black = "#1E2326"
 	grey  = "#384B55"
-	white = "#F2EFDF"
+	grey2 = "#9DA9A0"
+	white = "#D3C6AA"
 	red   = "#E67E80"
 
 	tableLimit            = 39
@@ -22,16 +24,53 @@ const (
 	apiURL = "http://localhost:8080"
 )
 
-var baseStyle = lipgloss.NewStyle().
-	BorderStyle(lipgloss.NormalBorder()).
-	BorderForeground(lipgloss.Color(green))
-
-type TableBoxStyles struct {
-	Active   lipgloss.Style
-	Inactive lipgloss.Style
-}
-
 var (
+	keyMaps = map[CLIState][]key.Binding{
+		TargetDomainTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to Assets", "a")),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Open URL", "Enter")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("Exit", "q/ctrl+c")),
+		},
+		SearchResultsTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to Assets", "a")),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("Sort by", "s")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Go to URL", "Enter")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("Exit search results", "q")),
+		},
+		PortsTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Go to Assets", "a")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to domains table", "b/q")),
+		},
+		BruteForcedTable: {
+			key.NewBinding(key.WithKeys("j"), key.WithHelp("Move up", "k")),
+			key.NewBinding(key.WithKeys("k"), key.WithHelp("Move down", "j")),
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Go to Ports", "p")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Open URL", "Enter")),
+			key.NewBinding(key.WithKeys("b"), key.WithHelp("Go back to Domains", "b/q")),
+		},
+		SortMode: {
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("Sort by Ports", "p")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("Sort by Assets", "a")),
+		},
+		SearchMode: {
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("Exit search", "esc")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("Search", "enter")),
+		},
+	}
+
+	baseStyle = lipgloss.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color(green))
+
 	DefaultBoxStyles = TableBoxStyles{
 		Active: lipgloss.NewStyle().
 			BorderStyle(lipgloss.NormalBorder()).
@@ -44,8 +83,12 @@ var (
 	}
 )
 
+type TableBoxStyles struct {
+	Active   lipgloss.Style
+	Inactive lipgloss.Style
+}
+
 // Updates tables styles to represent currently active table
-// TODO: THis needs to set the styles for the search box if CLIState == Search
 func (c *CLI) updateStyles() string {
 	// TODO: There has to be a better way to do this, but I can't think of it right now
 	selectedStyle := table.DefaultStyles()
