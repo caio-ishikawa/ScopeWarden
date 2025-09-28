@@ -47,7 +47,7 @@ func (db Database) InsertTarget(target models.Target) error {
 
 func (db Database) UpdateTargetEnabled(targetName string, enabled bool) error {
 	if _, err := db.connection.Exec(`UPDATE target SET enabled = ? WHERE name = ?`, enabled, targetName); err != nil {
-		return fmt.Errorf("Failed to insert target: %w", err)
+		return fmt.Errorf("Failed to update target: %w", err)
 	}
 
 	return nil
@@ -307,7 +307,7 @@ func (db Database) InsertPort(port models.Port) error {
 		port.Protocol,
 		port.State,
 	); err != nil {
-		return fmt.Errorf("Failed to insert target: %w", err)
+		return fmt.Errorf("Failed to insert port: %w", err)
 	}
 
 	return nil
@@ -320,7 +320,7 @@ func (db Database) UpdatePort(port models.Port) error {
 		port.LastUpdated,
 		port.UUID,
 	); err != nil {
-		return fmt.Errorf("Failed to insert target: %w", err)
+		return fmt.Errorf("Failed to update port: %w", err)
 	}
 
 	return nil

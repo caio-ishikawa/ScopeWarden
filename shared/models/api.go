@@ -60,3 +60,7 @@ type StatsResponse struct {
 	// Represents whether or not the scan is running currently
 	IsRunning bool `json:"is_running"`
 }
+
+type ErrorResponse struct {
+	Message string `json:"message"`
+}

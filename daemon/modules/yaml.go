@@ -3,6 +3,7 @@ package modules
 import (
 	"fmt"
 	"gopkg.in/yaml.v3"
+	"log"
 	"net/url"
 	"os"
 	"strings"
@@ -91,6 +92,8 @@ func GenerateModuleCommand(module Tool, targetURL string) (CommandExecution, err
 	if !detectedScopePlaceholder {
 		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
 	}
+
+	log.Printf("%s %s", output.command, strings.Join(output.args, " "))
 
 	return output, nil
 }

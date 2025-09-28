@@ -171,6 +171,7 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 		// Set up output channel & run modules
 		outputChan := make(chan modules.ToolOutput, 1000)
 		go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope.FirstRun)
+
 		for _, tool := range a.config.Tools {
 			log.Printf("Running tool %s", tool.ID)
 

@@ -27,8 +27,14 @@ func main() {
 	}
 
 	if flags.DisableTarget != "" {
-		if err := DisableTarget(flags.DisableTarget); err != nil {
+		if err := EnableDisableTarget(flags.DisableTarget, false); err != nil {
 			exitWithErr(fmt.Sprintf("Error disabing target: %s\n", err.Error()))
+		}
+	}
+
+	if flags.EnableTarget != "" {
+		if err := EnableDisableTarget(flags.DisableTarget, true); err != nil {
+			exitWithErr(fmt.Sprintf("Error enabling target: %s\n", err.Error()))
 		}
 	}
 

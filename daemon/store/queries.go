@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS target (
 );
 CREATE TABLE IF NOT EXISTS scope (
 	uuid TEXT NOT NULL UNIQUE,
+	allow_subdomains BOOL NOT NULL DEFAULT true,
 	target_uuid TEXT NOT NULL,
 	url TEXT NOT NULL UNIQUE,
 	first_run BOOL NOT NULL DEFAULT true,

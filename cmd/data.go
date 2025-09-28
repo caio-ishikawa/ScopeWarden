@@ -94,7 +94,7 @@ func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy, s
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return models.DomainListResponse{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		return models.DomainListResponse{}, parseError(res)
 	}
 
 	var ret models.DomainListResponse
@@ -116,7 +116,7 @@ func GetPortsByDomain(domainURL string) ([]models.Port, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		return nil, parseError(res)
 	}
 
 	var ret models.PortListResponse
@@ -139,7 +139,7 @@ func GetBruteForcedByDomain(domainURL string, offset int) ([]models.BruteForced,
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		return nil, parseError(res)
 	}
 
 	var ret models.BruteForcedListResponse
@@ -158,7 +158,7 @@ func GetTargetByName(target string) (models.Target, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return models.Target{}, fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		return models.Target{}, parseError(res)
 	}
 
 	var ret models.Target
@@ -177,7 +177,7 @@ func GetStats() ([]models.StatsResponse, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Unexpected status code: %v", res.StatusCode)
+		return nil, parseError(res)
 	}
 
 	var ret []models.StatsResponse
@@ -206,8 +206,28 @@ func InsertScope(scopes ScopeInsert) error {
 		}
 
 		if res.StatusCode != http.StatusCreated {
-			return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+			return parseError(res)
 		}
+	}
+
+	return nil
+}
+
+func EnableDisableTarget(scopeName string, enabled bool) error {
+	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/update_target?name=%s&enable_disable=%v", apiURL, scopeName, enabled), nil)
+	if err != nil {
+		return fmt.Errorf("Could update scope: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	//res, err := http.
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("Could not update scope: %w", err)
+	}
+
+	if res.StatusCode != http.StatusNoContent {
+		return parseError(res)
 	}
 
 	return nil
@@ -229,30 +249,17 @@ func InsertTarget(target string) error {
 	}
 
 	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
+		return parseError(res)
 	}
 
 	return nil
 }
 
-func DisableTarget(target string) error {
-	reqBody := models.InsertTargetRequest{
-		Name: target,
+func parseError(res *http.Response) error {
+	var msg models.ErrorResponse
+	if err := json.NewDecoder(res.Body).Decode(&msg); err != nil {
+		return fmt.Errorf("Failed to parse error response")
 	}
 
-	body, err := json.Marshal(&reqBody)
-	if err != nil {
-		return fmt.Errorf("Failed to marshal scope request body: %w", err)
-	}
-
-	res, err := http.Post(fmt.Sprintf("%s/insert_target", apiURL), "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return fmt.Errorf("Could not insert target: %w", err)
-	}
-
-	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("Unexpected error code: %v", res.StatusCode)
-	}
-
-	return nil
+	return fmt.Errorf("Error: %s ", msg.Message)
 }

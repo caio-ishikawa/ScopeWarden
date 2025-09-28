@@ -64,6 +64,8 @@ Multiple tools are allowed to be configured under the `tools` section, each with
 - **id (required):** Unique name for the tool.  
 - **command (required):** CLI command to run. It supports the placeholder `<target>` that gets replaced with the scope in the current scan.  
 - **verbose (optional):** `true` or `false`. Enables stderr logging for the tool. Defaults to false if not set.
+- **allow_subs:** String representing what to add to the command to allow subdomain scanning. If not set, it will use the default for the specific command. Defaults to empty string.
+- **disallow_subs:** String representing what to add to the command to disallow subdomain scanning. If not set, it will use the default for the specific command. Defaults to empty string.
 
 - **Output Parser:** Configuration to define how the tool's output gets processed. **Note:** The configured regex will match against all the outputs of a tool. The found match will be tested by means of a GET request, and fingerprinted based on the response. If a specific tool outputs more than the found URL in the same line, it is recommended to pipe the output of the tool to `awk` or similar, such that the tool only the desired outputs that can be matched with the regex.
     - **type (required)**: Currently only supports `realtime` option (parse output as it is produced).  
@@ -86,10 +88,13 @@ Multiple tools are allowed to be configured under the `tools` section, each with
 global:
   schedule: 12
   nofity: true
+  intensity: 'aggressive'
 
 tools:
   - id: gau
     command: 'gau <target>'
+    allow_subs: '--subs'
+    disallow_subs: ''
     verbose: false 
     port_scan:
       run: true
@@ -106,7 +111,29 @@ tools:
       regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
       conditions:
         - technology: 'php'
-          wordlist: 'absolute/path/to/php/wordlist.txt'
+          wordlist: '/abolute/path/to/wordlist'
+        - technology: 'apache'
+          wordlist: '/abolute/path/to/wordlist'
+        - technology: 'nginx'
+          wordlist: '/abolute/path/to/wordlist'
+    parser:
+      type: 'realtime'
+      regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+    
+  - id: waymore
+    command: 'waymore -i <target>'
+    allow_subs: ''
+    disallow_subs: '--no-subs'
+    verbose: false
+    port_scan:
+      run: true
+      ports:
+        - 21
+        - 22
+        - 53
+        - 5432
+        - 3306
+        - 9092
     parser:
       type: 'realtime'
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'

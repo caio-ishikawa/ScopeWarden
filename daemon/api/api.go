@@ -30,7 +30,7 @@ func NewAPI() (API, error) {
 
 func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -39,7 +39,7 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 	targetUUID := query.Get("target_uuid")
 	if targetUUID == "" {
 		log.Println("[API] No target uuid or domain url")
-		http.Error(w, "No target UUID", http.StatusBadRequest)
+		a.writeError(w, "No target UUID", http.StatusBadRequest)
 		return
 	}
 
@@ -50,14 +50,14 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.Atoi(limitQuery)
 	if err != nil {
 		log.Println(err)
-		http.Error(w, fmt.Sprintf("Invalid limit value %s", limitQuery), http.StatusBadRequest)
+		a.writeError(w, fmt.Sprintf("Invalid limit value %s", limitQuery), http.StatusBadRequest)
 		return
 	}
 	offsetQuery := query.Get("offset")
 	offset, err = strconv.Atoi(offsetQuery)
 	if err != nil {
 		log.Println(err)
-		http.Error(w, fmt.Sprintf("Invalid offset value %s", offsetQuery), http.StatusBadRequest)
+		a.writeError(w, fmt.Sprintf("Invalid offset value %s", offsetQuery), http.StatusBadRequest)
 		return
 	}
 
@@ -77,20 +77,20 @@ func (a API) getDomains(w http.ResponseWriter, r *http.Request) {
 	domains, err := a.db.GetDomainsByTarget(limit, offset, sortBy, targetUUID, urlSubstrQuery)
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, fmt.Sprintf("Failed to get domains for %s", targetUUID), http.StatusInternalServerError)
+		a.writeError(w, fmt.Sprintf("Failed to get domains for %s", targetUUID), http.StatusInternalServerError)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(domains); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		a.writeError(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (a API) getTargetByName(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -98,57 +98,61 @@ func (a API) getTargetByName(w http.ResponseWriter, r *http.Request) {
 
 	targetName := query.Get("name")
 	if targetName == "" {
-		http.Error(w, "No target name", http.StatusBadRequest)
+		a.writeError(w, "No target name", http.StatusBadRequest)
 		return
 	}
 
 	target, err := a.db.GetTargetByName(targetName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get target with name %s", targetName), http.StatusInternalServerError)
+		a.writeError(w, fmt.Sprintf("Failed to get target with name %s", targetName), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(target); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		a.writeError(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (a API) enableDisableTarget(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPatch {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	query := r.URL.Query()
 	targetName := query.Get("name")
 	if targetName == "" {
-		http.Error(w, "No target name", http.StatusBadRequest)
+		a.writeError(w, "No target name", http.StatusBadRequest)
 		return
 	}
 
 	enabled := query.Get("enable_disable")
 	if enabled == "" {
-		http.Error(w, "No enabled", http.StatusBadRequest)
+		a.writeError(w, "No enabled", http.StatusBadRequest)
 		return
 	}
 
 	enabledBool, err := strconv.ParseBool(enabled)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("could not convert %s to boolean", enabled), http.StatusBadRequest)
+		a.writeError(w, fmt.Sprintf("could not convert %s to boolean", enabled), http.StatusBadRequest)
 		return
 	}
 
 	if err := a.db.UpdateTargetEnabled(targetName, enabledBool); err != nil {
 		log.Printf("Failed to disable target")
+		a.writeError(w, fmt.Sprintf("Could not update target %s", targetName), http.StatusBadRequest)
+		return
 	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -156,13 +160,13 @@ func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 
 	targetUUID := query.Get("target_name")
 	if targetUUID == "" {
-		http.Error(w, "No target name", http.StatusBadRequest)
+		a.writeError(w, "No target name", http.StatusBadRequest)
 		return
 	}
 
 	scopes, err := a.db.GetAllScopes()
 	if err != nil {
-		http.Error(w, "Failed to get all scopes", http.StatusInternalServerError)
+		a.writeError(w, "Failed to get all scopes", http.StatusInternalServerError)
 		return
 	}
 
@@ -173,36 +177,40 @@ func (a API) getScopes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		a.writeError(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req models.InsertScopeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		a.writeError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	target, err := a.db.GetTargetByName(req.TargetName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Could not get target by name %s", req.TargetName), http.StatusBadRequest)
+		a.writeError(w, fmt.Sprintf("Could not get target by name %s", req.TargetName), http.StatusBadRequest)
 		return
 	}
 
 	if target == nil {
-		http.Error(w, fmt.Sprintf("Could not find target by name %s", req.TargetName), http.StatusNotFound)
+		a.writeError(w, fmt.Sprintf("Could not find target by name %s", req.TargetName), http.StatusNotFound)
+		return
+	}
+
+	if req.URL == "" {
+		a.writeError(w, fmt.Sprintf("No scope URL"), http.StatusBadRequest)
 		return
 	}
 
 	scopeUUID := uuid.NewString()
-
 	scope := models.Scope{
 		UUID:       scopeUUID,
 		TargetUUID: target.UUID,
@@ -212,7 +220,7 @@ func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 
 	if err = a.db.InsertScope(scope); err != nil {
 		log.Printf("Failed to insert scope: %s", err.Error())
-		http.Error(w, "Failed to insert scope", http.StatusInternalServerError)
+		a.writeError(w, "Failed to insert scope", http.StatusInternalServerError)
 		return
 	}
 
@@ -221,14 +229,14 @@ func (a API) insertScope(w http.ResponseWriter, r *http.Request) {
 
 func (a API) insertTarget(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req models.InsertTargetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Println(err.Error())
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		a.writeError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
@@ -241,7 +249,7 @@ func (a API) insertTarget(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.db.InsertTarget(target); err != nil {
 		log.Println(err.Error())
-		http.Error(w, "Failed to insert target", http.StatusInternalServerError)
+		a.writeError(w, "Failed to insert target", http.StatusInternalServerError)
 		return
 	}
 
@@ -250,7 +258,7 @@ func (a API) insertTarget(w http.ResponseWriter, r *http.Request) {
 
 func (a API) getPortsByDomain(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -259,24 +267,24 @@ func (a API) getPortsByDomain(w http.ResponseWriter, r *http.Request) {
 	domainURL := query.Get("domain_url")
 	if domainURL == "" {
 		log.Println("no domain url")
-		http.Error(w, "No domain url", http.StatusBadRequest)
+		a.writeError(w, "No domain url", http.StatusBadRequest)
 		return
 	}
 
 	domain, err := a.db.GetDomainByURL(domainURL)
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, fmt.Sprintf("Could not get domain by URL: %s", err.Error()), http.StatusInternalServerError)
+		a.writeError(w, fmt.Sprintf("Could not get domain by URL: %s", err.Error()), http.StatusInternalServerError)
 	}
 
 	if domain == nil {
-		http.Error(w, fmt.Sprintf("Could not find domain by URL %s", domainURL), http.StatusNotFound)
+		a.writeError(w, fmt.Sprintf("Could not find domain by URL %s", domainURL), http.StatusNotFound)
 	}
 
 	ports, err := a.db.GetPortByDomain(domain.UUID)
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
+		a.writeError(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
 		return
 	}
 
@@ -289,14 +297,14 @@ func (a API) getPortsByDomain(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		a.writeError(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -305,52 +313,52 @@ func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request)
 	domainURL := query.Get("domain_url")
 	if domainURL == "" {
 		log.Println("no domain url")
-		http.Error(w, "No domain url", http.StatusBadRequest)
+		a.writeError(w, "No domain url", http.StatusBadRequest)
 		return
 	}
 
 	limitStr := query.Get("limit")
 	if limitStr == "" {
 		log.Println("no limit param")
-		http.Error(w, "No limit query parameter", http.StatusBadRequest)
+		a.writeError(w, "No limit query parameter", http.StatusBadRequest)
 		return
 	}
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil {
 		log.Printf("Invalid limit parameter %s", limitStr)
-		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
+		a.writeError(w, "Invalid limit parameter", http.StatusBadRequest)
 	}
 
 	offsetStr := query.Get("offset")
 	if offsetStr == "" {
 		log.Println("no offset param")
-		http.Error(w, "No offset query parameter", http.StatusBadRequest)
+		a.writeError(w, "No offset query parameter", http.StatusBadRequest)
 		return
 	}
 
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
 		log.Printf("Invalid offset parameter %s", offsetStr)
-		http.Error(w, "Invalid offset parameter", http.StatusBadRequest)
+		a.writeError(w, "Invalid offset parameter", http.StatusBadRequest)
 	}
 
 	domain, err := a.db.GetDomainByURL(domainURL)
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, fmt.Sprintf("Could not get domain by URL: %s", err.Error()), http.StatusInternalServerError)
+		a.writeError(w, fmt.Sprintf("Could not get domain by URL: %s", err.Error()), http.StatusInternalServerError)
 	}
 
 	if domain == nil {
 		errMsg := fmt.Sprintf("Could not find domain by URL %s", domainURL)
 		log.Println(errMsg)
-		http.Error(w, errMsg, http.StatusNotFound)
+		a.writeError(w, errMsg, http.StatusNotFound)
 	}
 
 	bruteForcedPaths, err := a.db.GetBruteForcedByDomain(domain.UUID, limit, offset)
 	if err != nil {
 		log.Println(err.Error())
-		http.Error(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
+		a.writeError(w, fmt.Sprintf("Failed to get all ports for domain %s", domain.UUID), http.StatusInternalServerError)
 		return
 	}
 
@@ -361,21 +369,21 @@ func (a API) getBruteForcedPathsByDomain(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resStruct); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		a.writeError(w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		a.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	stats, err := a.db.GetStats()
 	if err != nil {
 		log.Println(err)
-		http.Error(w, "Failed to get all scopes", http.StatusInternalServerError)
+		a.writeError(w, "Failed to get all scopes", http.StatusInternalServerError)
 		return
 	}
 
@@ -408,7 +416,19 @@ func (a API) getStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(output); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		a.writeError(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (a API) writeError(w http.ResponseWriter, errMsg string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	body := models.ErrorResponse{Message: errMsg}
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		// fallback in case JSON encoding fails
+		a.writeError(w, errMsg, status)
 		return
 	}
 }
@@ -422,6 +442,7 @@ func (a API) StartAPI() error {
 	http.HandleFunc("/stats", a.getStats)
 	http.HandleFunc("/ports", a.getPortsByDomain)
 	http.HandleFunc("/bruteforced", a.getBruteForcedPathsByDomain)
+	http.HandleFunc("/update_target", a.enableDisableTarget)
 
 	apiPort := os.Getenv("SCOPEWARDEN_API_PORT")
 	if apiPort == "" {
