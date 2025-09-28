@@ -82,7 +82,7 @@ Multiple tools are allowed to be configured under the `tools` section, each with
       - **wordlist:** Path to the wordlist to use for that technology. Expects absolute path.
 - **Overrides**: Configures the per-scope overrides for the specific tool.
     - **scope:** URL for the scope (should be the same as the one added via the CLI).
-    - **type:** Configured what to override. Can be `port_scan` to override the ports scanned for the given scope,`brute_force` to override the brute force command for the specific scope (e.g. to change the rate-limit on the tool) or`tool` to override the command for the tool itself for the specific scope (e.g. some commands will have flags to allow/disallow subdomains).
+    - **type:** Configures what to override. Can be `port_scan` to override the ports scanned for the given scope,`brute_force` to override the brute force command for the specific scope (e.g. to change the rate-limit on the tool) or`tool` to override the command for the tool itself for the specific scope (e.g. some commands will have flags to allow/disallow subdomains).
     - **command:** Full command to override. Will be parsed the same way as the command it overrides (e.g. Supports `<target>` for the tool override and `<target>` & `<wordlist>` for the brute force override. This will be ignored if overriding the port scan, and it will use the wordlist per-technology as specified in the `brute_force` parameter.
     - **ports:** List of ports to scan for the specific target.
 
