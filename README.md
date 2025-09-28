@@ -61,27 +61,30 @@ The yaml file can contain the folliwng:
 
 #### Tools
 Multiple tools are allowed to be configured under the `tools` section, each with the following configurations:
-- **id (required):** Unique name for the tool.  
-- **command (required):** CLI command to run. It supports the placeholder `<target>` that gets replaced with the scope in the current scan.  
-- **verbose (optional):** `true` or `false`. Enables stderr logging for the tool. Defaults to false if not set.
-- **allow_subs:** String representing what to add to the command to allow subdomain scanning. If not set, it will use the default for the specific command. Defaults to empty string.
-- **disallow_subs:** String representing what to add to the command to disallow subdomain scanning. If not set, it will use the default for the specific command. Defaults to empty string.
+- **id:** Unique name for the tool.  
+- **command:** CLI command to run. It supports the placeholder `<target>` that gets replaced with the scope in the current scan.  
+- **verbose:** `true` or `false`. Enables stderr logging for the tool. Defaults to false if not set.
 
 - **Output Parser:** Configuration to define how the tool's output gets processed. **Note:** The configured regex will match against all the outputs of a tool. The found match will be tested by means of a GET request, and fingerprinted based on the response. If a specific tool outputs more than the found URL in the same line, it is recommended to pipe the output of the tool to `awk` or similar, such that the tool only the desired outputs that can be matched with the regex.
-    - **type (required)**: Currently only supports `realtime` option (parse output as it is produced).  
-    - **regex (required)**: Regular expression to extract relevant information from the tool output. 
+    - **type**: Currently only supports `realtime` option (parse output as it is produced).  
+    - **regex**: Regular expression to extract relevant information from the tool output. 
 
 - **Port Scan:** Configuration to define the automated port scan parameters. 
-    - **run (optional):** `true` or `false`. Enables port scan for each found domain. Defaults to `false` if not set.
-    - **ports (optional):** List of ports to scan (e.g., `21, 22, 53`). If empty or not set, ScopeWarden will run a port scan with no specified ports.   
+    - **run:** `true` or `false`. Enables port scan for each found domain. Defaults to `false` if not set.
+    - **ports:** List of ports to scan (e.g., `21, 22, 53`). If empty or not set, ScopeWarden will run a port scan with no specified ports.   
 
 - **Brute Force:** Brute force attempts are conducted to found domains in the scan, and can be configured to do so conditionally depending on the technologies fingerprinted on the domain. **Note:** Even though brute forces happen concurrently, it is **heavily** encouraged to use smaller/more focused wordlists to keep the scan from taking too long.
-    - **run (optional):** `true` or `false`. Enables brute force scans. Defaults to false if not set. 
-    - **command (required):** The fuzzing command. It supports placeholders `<target>` and `<wordlist>` that get replaced with the domain URL in the current scan and the worlist configured in the **conditions** field.  
-    - **regex (required):** Regex to filter valid results from fuzzing output.
-    - **conditions (required):** Optional list of technology-specific wordlists. If empty or not set, this will run the brute force command for **every found domain**:
-      - **technology (required):** Non-case-sensitive target technology to run the scan (e.g., `php`, `wordpress`). If none is set, the brute force scan will be conducted to **every found domain in the scan (not recommended)**.
-      - **wordlist (required):** Path to the wordlist to use for that technology. Expects absolute path.
+    - **run:** `true` or `false`. Enables brute force scans. Defaults to false if not set. 
+    - **command:** The fuzzing command. It supports placeholders `<target>` and `<wordlist>` that get replaced with the domain URL in the current scan and the worlist configured in the **conditions** field.  
+    - **regex:** Regex to filter valid results from fuzzing output.
+    - **conditions:** Optional list of technology-specific wordlists. If empty or not set, this will run the brute force command for **every found domain**:
+      - **technology:** Non-case-sensitive target technology to run the scan (e.g., `php`, `wordpress`). If none is set, the brute force scan will be conducted to **every found domain in the scan (not recommended)**.
+      - **wordlist:** Path to the wordlist to use for that technology. Expects absolute path.
+- **Overrides**: Configures the per-scope overrides for the specific tool.
+    - **scope:** URL for the scope (should be the same as the one added via the CLI).
+    - **type:** Configured what to override. Can be `port_scan` to override the ports scanned for the given scope,`brute_force` to override the brute force command for the specific scope (e.g. to change the rate-limit on the tool) or`tool` to override the command for the tool itself for the specific scope (e.g. some commands will have flags to allow/disallow subdomains).
+    - **command:** Full command to override. Will be parsed the same way as the command it overrides (e.g. Supports `<target>` for the tool override and `<target>` & `<wordlist>` for the brute force override. This will be ignored if overriding the port scan, and it will use the wordlist per-technology as specified in the `brute_force` parameter.
+    - **ports:** List of ports to scan for the specific target.
 
 #### Example Configuration
 ```
@@ -119,6 +122,17 @@ tools:
     parser:
       type: 'realtime'
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+    overrides:
+      - scope: 'nasa.gov'
+        type: 'brute_force'
+        command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 1'
+      - scope: 'nasa.gov'
+        type: 'tool'
+        command: 'gau <target> --subs'
+      - scope: 'nasa.gov'
+        type: 'port_scan'
+        ports:
+          - 22
     
   - id: waymore
     command: 'waymore -i <target>'

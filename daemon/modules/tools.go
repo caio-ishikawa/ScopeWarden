@@ -110,10 +110,10 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 	wg.Wait()
 }
 
-func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error) {
+func RunPortScan(tool Tool, domain models.Domain, scope models.Scope) ([]byte, error) {
 	log.Printf("Running port scan for %s", domain.URL)
 
-	commandExecution, err := GeneratePortScanCmd(tool.PortScanConfig.Ports, domain.URL)
+	commandExecution, err := GeneratePortScanCmd(tool, domain.URL, scope.URL)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to generate port scan command: %w", err)
 	}
@@ -134,14 +134,22 @@ func RunPortScan(tool Tool, domain models.Domain, firstRun bool) ([]byte, error)
 	return stdout.Bytes(), nil
 }
 
-func RunBruteForce(wg *sync.WaitGroup, sem chan struct{}, tool Tool, domain models.Domain, firstRun bool, technologies []string, outputChan chan ToolOutput) {
+func RunBruteForce(
+	wg *sync.WaitGroup,
+	sem chan struct{},
+	tool Tool,
+	domain models.Domain,
+	scope models.Scope,
+	technologies []string,
+	outputChan chan ToolOutput,
+) {
 	defer wg.Done()
 
 	sem <- struct{}{}
 	defer func() { <-sem }()
 
 	for _, tech := range technologies {
-		commandExecution, err := GenerateBruteForceCmd(tool.BruteForceConfig, domain.URL, tech)
+		commandExecution, err := GenerateBruteForceCmd(tool, domain.URL, scope.URL, tech)
 		if err != nil {
 			log.Printf("Failed to generate port scan command: %s", err.Error())
 			continue

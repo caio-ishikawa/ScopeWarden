@@ -170,7 +170,7 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 
 		// Set up output channel & run modules
 		outputChan := make(chan modules.ToolOutput, 1000)
-		go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope.FirstRun)
+		go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope)
 
 		for _, tool := range a.config.Tools {
 			log.Printf("Running tool %s", tool.ID)
@@ -207,7 +207,7 @@ func (a *Daemon) Stats() models.DaemonStats {
 }
 
 // Consumes real time output of a tool. Handles both URL outputs and the output of the brute force attempts
-func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.ToolOutput, target models.TargetTables, firstRun bool) {
+func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.ToolOutput, target models.TargetTables, scope models.Scope) {
 	for input := range inputChan {
 		switch table {
 		case models.DomainTable:
@@ -217,9 +217,9 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 				Timeout: 5 * time.Second,
 			}
 
-			go a.processURLOutput(httpClient, input, firstRun, target)
+			go a.processURLOutput(httpClient, input, scope, target)
 		case models.BruteforcedTable:
-			if err := a.processBruteForceResults(input, target, firstRun); err != nil {
+			if err := a.processBruteForceResults(input, target, scope); err != nil {
 				log.Println(err.Error())
 			}
 		default:
@@ -229,7 +229,7 @@ func (a *Daemon) ConsumeRealTime(table models.Table, inputChan chan modules.Tool
 }
 
 // Process URL output for a tool (parses, inserts/updates DB, notifies)
-func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, firstRun bool, target models.TargetTables) {
+func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutput, scope models.Scope, target models.TargetTables) {
 	defer func() { <-a.concurrencySettings.domainSemaphore }()
 
 	baseURL, err := parseURL(input.Output)
@@ -319,13 +319,13 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 
 	if existingDomain == nil {
 		foundDomain.UUID = uuid.NewString()
-		if err := a.insertNewFoundDomain(foundDomain, notification, firstRun); err != nil {
+		if err := a.insertNewFoundDomain(foundDomain, notification, scope.FirstRun); err != nil {
 			log.Printf("Failed to insert new domain: %s", err.Error())
 			return
 		}
 
-		a.portScan(input.Tool, foundDomain, firstRun, target)
-		a.bruteForce(input.Tool, foundDomain, firstRun, responseDetails.technologies)
+		a.portScan(input.Tool, foundDomain, scope, target)
+		a.bruteForce(input.Tool, foundDomain, scope, responseDetails.technologies)
 
 		return
 	}
@@ -340,8 +340,8 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 			return
 		}
 
-		a.portScan(input.Tool, foundDomain, firstRun, target)
-		a.bruteForce(input.Tool, foundDomain, firstRun, responseDetails.technologies)
+		a.portScan(input.Tool, foundDomain, scope, target)
+		a.bruteForce(input.Tool, foundDomain, scope, responseDetails.technologies)
 	}
 
 	return
@@ -389,14 +389,15 @@ func (a *Daemon) updateExistingDomain(newDomain models.Domain, existingDomain mo
 }
 
 // Run port scan synchronously and process results for a specific domain
-func (a *Daemon) portScan(tool modules.Tool, domain models.Domain, firstRun bool, target models.TargetTables) {
+func (a *Daemon) portScan(tool modules.Tool, domain models.Domain, scope models.Scope, target models.TargetTables) {
 	if tool.PortScanConfig.Run {
-		portScanRes, err := modules.RunPortScan(tool, domain, firstRun)
+		// TODO: Account for overrides
+		portScanRes, err := modules.RunPortScan(tool, domain, scope)
 		if err != nil {
 			log.Printf("Failed to run port scan for domain %s: %s", domain.URL, err.Error())
 		}
 
-		if err := a.processPortScan(portScanRes, domain, firstRun, target); err != nil {
+		if err := a.processPortScan(portScanRes, domain, scope.FirstRun, target); err != nil {
 			log.Printf("Failed to process port scan result: %s", err.Error())
 		}
 	}
@@ -492,33 +493,34 @@ func (a *Daemon) processPortScan(scanRes []byte, domain models.Domain, firstRun 
 
 // Runs brute force command asynchronously
 func (a *Daemon) bruteForce(
-	tool modules.Tool, domain models.Domain, firstRun bool, technologies []string,
+	tool modules.Tool, domain models.Domain, scope models.Scope, technologies []string,
 ) {
+	// TODO: Account for overrides
 	if tool.BruteForceConfig.Run {
 		a.concurrencySettings.bruteForceWg.Add(1)
 
 		outputChan := make(chan modules.ToolOutput, 1000)
 
-		go a.ConsumeRealTime(models.BruteforcedTable, outputChan, domain, firstRun)
+		go a.ConsumeRealTime(models.BruteforcedTable, outputChan, domain, scope)
 		go modules.RunBruteForce(
 			a.concurrencySettings.bruteForceWg,
 			a.concurrencySettings.bruteForceSemaphore,
 			tool,
 			domain,
-			firstRun,
+			scope,
 			technologies,
 			outputChan,
 		)
 	}
 }
 
-func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain models.TargetTables, firstRun bool) error {
+func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain models.TargetTables, scope models.Scope) error {
 	log.Printf("Processing bruteforced result %s", input.Output)
 
 	newBruteForced := models.BruteForced{
 		DomainUUID:  domain.GetUUID(),
 		Path:        input.Output,
-		FirstRun:    firstRun,
+		FirstRun:    scope.FirstRun,
 		LastUpdated: time.Now().String(),
 	}
 
@@ -539,7 +541,7 @@ func (a *Daemon) processBruteForceResults(input modules.ToolOutput, domain model
 			return fmt.Errorf("Failed to process bruteforced path: %w", err)
 		}
 
-		if !firstRun && a.config.Global.Notify {
+		if !scope.FirstRun && a.config.Global.Notify {
 			if err := a.telegram.SendMessage(notification); err != nil {
 				log.Printf("Failed to notify brute force result: %s", err.Error())
 			}

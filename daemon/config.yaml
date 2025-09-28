@@ -18,7 +18,7 @@ tools:
         - 9092
     brute_force:
       run: true
-      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 30'
+      command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 10'
       regex: '^\/?(?:[\w-]+(?:\.[\w-]+)*\/)*[\w-]+(?:\.[\w-]+)*\/?$'
       conditions:
         - technology: 'php'
@@ -30,6 +30,13 @@ tools:
     parser:
       type: 'realtime'
       regex: '^(https?:\/\/)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(:\d+)?(\/[^\r\n]*)?$'
+    overrides:
+      - scope: 'nasa.gov'
+        type: 'brute_force'
+        command: 'ffuf -u <target>/FUZZ -w <wordlist> -s -mc 200 -rate 30'
+      - scope: 'nasa.gov'
+        type: 'tool'
+        command: 'gau <target> --subs'
     
   - id: waymore
     command: 'waymore -i <target>'

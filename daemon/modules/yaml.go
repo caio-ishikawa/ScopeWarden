@@ -11,6 +11,7 @@ import (
 
 type OutputType string
 type Intensity string
+type OverrideType string
 
 const (
 	RealTimeOutput OutputType = "realtime"
@@ -22,6 +23,10 @@ const (
 
 	Aggressive   Intensity = "aggressive"
 	Conservative Intensity = "conservative"
+
+	BruteForceType OverrideType = "brute_force"
+	PortScanType   OverrideType = "port_scan"
+	ToolType       OverrideType = "tool"
 )
 
 type GlobalConfig struct {
@@ -54,6 +59,13 @@ type PortScanConfig struct {
 	Ports []string `yaml:"ports"`
 }
 
+type ToolOverride struct {
+	Scope   string       `yaml:"scope"`
+	Type    OverrideType `yaml:"type"`
+	Command string       `yaml:"command"`
+	Ports   []string     `yaml:"ports"`
+}
+
 type Tool struct {
 	ID               string             `yaml:"id"`
 	Cmd              string             `yaml:"command"`
@@ -61,10 +73,18 @@ type Tool struct {
 	PortScanConfig   PortScanConfig     `yaml:"port_scan"`
 	ParserConfig     OutputParserConfig `yaml:"parser"`
 	BruteForceConfig BruteForceConfig   `yaml:"brute_force"`
+	OverrideConfig   []ToolOverride     `yaml:"overrides"`
 }
 
 func GenerateModuleCommand(module Tool, targetURL string) (CommandExecution, error) {
-	split := strings.Split(module.Cmd, " ")
+	commandStr := module.Cmd
+	for _, override := range module.OverrideConfig {
+		if override.Scope == targetURL && override.Type == ToolType {
+			commandStr = override.Command
+		}
+	}
+
+	split := strings.Split(commandStr, " ")
 	if len(split) == 0 {
 		return CommandExecution{}, fmt.Errorf("Failed to parse tool %s command: could not detect <scope>", module.ID)
 	}
@@ -98,7 +118,17 @@ func GenerateModuleCommand(module Tool, targetURL string) (CommandExecution, err
 	return output, nil
 }
 
-func GeneratePortScanCmd(ports []string, target string) (CommandExecution, error) {
+func GeneratePortScanCmd(module Tool, target string, scopeURL string) (CommandExecution, error) {
+	ports := module.PortScanConfig.Ports
+
+	for _, override := range module.OverrideConfig {
+		if override.Type == PortScanType {
+			if len(override.Ports) > 0 {
+				ports = []string{}
+			}
+		}
+	}
+
 	output := CommandExecution{
 		command: PortScanTool,
 	}
@@ -114,7 +144,7 @@ func GeneratePortScanCmd(ports []string, target string) (CommandExecution, error
 	if len(ports) == 0 {
 		args = []string{scanTarget, "-Pn", "-T3"}
 	} else {
-		args = []string{scanTarget, "-Pn", "-T3", "-p", strings.Join(ports, ",")}
+		args = []string{scanTarget, "-Pn", "-T3", "-p", strings.Join(module.PortScanConfig.Ports, ",")}
 	}
 
 	output.args = args
@@ -122,12 +152,19 @@ func GeneratePortScanCmd(ports []string, target string) (CommandExecution, error
 	return output, nil
 }
 
-func GenerateBruteForceCmd(bruteForceConfig BruteForceConfig, target string, technology string) (*CommandExecution, error) {
+func GenerateBruteForceCmd(module Tool, target string, scopeURL string, technology string) (*CommandExecution, error) {
+	commandStr := module.BruteForceConfig.Cmd
+	for _, override := range module.OverrideConfig {
+		if override.Type == BruteForceType && override.Scope == scopeURL {
+			commandStr = override.Command
+		}
+	}
+
 	var output CommandExecution
 	foundTechWordlist := false
 	args := make([]string, 0)
 
-	split := strings.Fields(bruteForceConfig.Cmd)
+	split := strings.Fields(commandStr)
 	for i, s := range split {
 		if i == 0 {
 			output.command = s
@@ -138,7 +175,7 @@ func GenerateBruteForceCmd(bruteForceConfig BruteForceConfig, target string, tec
 			continue
 		}
 		if s == WordlistPlaceholder {
-			for _, conditions := range bruteForceConfig.Conditions {
+			for _, conditions := range module.BruteForceConfig.Conditions {
 				if strings.ToLower(conditions.Technology) == technology {
 					args = append(args, conditions.Wordlist)
 					foundTechWordlist = true
@@ -215,6 +252,21 @@ func NewDaemonConfig() (DaemonConfig, error) {
 				return DaemonConfig{}, fmt.Errorf("Invalid config yaml: brute_force is enabled but has no regex")
 			}
 		}
+
+		if len(tool.OverrideConfig) > 0 {
+			for _, override := range tool.OverrideConfig {
+				if override.Scope == "" {
+					return DaemonConfig{}, fmt.Errorf("Invalid config yaml: override scope is empty")
+				}
+				if override.Type != BruteForceType && override.Type != PortScanType && override.Type != ToolType {
+					return DaemonConfig{}, fmt.Errorf("Invalid config yaml: invalid override type %s", override.Type)
+				}
+				if override.Type != PortScanType && override.Command == "" {
+					return DaemonConfig{}, fmt.Errorf("Invalid config yaml: override command is empty")
+				}
+			}
+		}
+
 	}
 
 	return modules, nil
