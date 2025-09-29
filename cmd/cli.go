@@ -82,11 +82,12 @@ type CLI struct {
 	selectedDomainURL string
 	selectedDomainIdx int
 	domainOffset      int
-	//searchResultOffset int
 	bruteForcedOffset int
 	targetUUID        string
 	state             CLIState
 	isSearching       bool
+	height            int
+	width             int
 }
 
 func NewCLI() (CLI, error) {
@@ -189,6 +190,9 @@ func (c *CLI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		c.height = msg.Height
+		c.width = msg.Width
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "l":
@@ -361,3 +365,32 @@ func (c *CLI) RenderSearchModal() error {
 	fmt.Println(c.View())
 	return nil
 }
+
+//func (c *CLI) generateColumns() {
+//	StatsColumns = []table.Column{
+//		{Title: "Total Found URLs", Width: 16},
+//		{Title: "Total New URLs", Width: 14},
+//		{Title: "Total Found Ports", Width: 17},
+//		{Title: "Total New Ports", Width: 15},
+//		{Title: "Scan duration", Width: 13},
+//		{Title: "Scan time", Width: 20},
+//		{Title: "Is Running", Width: 10},
+//	}
+//
+//	URLColumns = []table.Column{
+//		{Title: "Status", Width: 6},
+//		{Title: "Ports", Width: 5},
+//		{Title: "Brute", Width: 5},
+//		{Title: "URL", Width: 65},
+//	}
+//
+//	PortColumns = []table.Column{
+//		{Title: "Ports", Width: 10},
+//		{Title: "Protocol", Width: 15},
+//		{Title: "State", Width: 20},
+//	}
+//
+//	BruteForcedColumns = []table.Column{
+//		{Title: "Assets", Width: 25},
+//	}
+//}

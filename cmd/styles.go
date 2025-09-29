@@ -21,6 +21,8 @@ const (
 	tableHeightFullScreen = 80
 	tableHeightOne        = 2
 
+	largestTableSize = 256
+
 	apiURL = "http://localhost:8080"
 )
 
@@ -90,6 +92,7 @@ type TableBoxStyles struct {
 }
 
 // Updates tables styles to represent currently active table
+// TODO: only join vertically if width larger than 256
 func (c *CLI) updateStyles() string {
 	// TODO: There has to be a better way to do this, but I can't think of it right now
 	selectedStyle := table.DefaultStyles()
@@ -114,51 +117,66 @@ func (c *CLI) updateStyles() string {
 		Background(lipgloss.Color(grey)).
 		Bold(true)
 
+	var row string
 	switch c.state {
 	case PortsTable:
 		c.portsTable.SetStyles(selectedStyle)
 		c.table.SetStyles(inactiveStyle)
 		c.bruteForcedTable.SetStyles(inactiveStyle)
-		row := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			DefaultBoxStyles.Inactive.Render(c.table.View()),
-			DefaultBoxStyles.Active.Render(c.portsTable.View()),
-			DefaultBoxStyles.Inactive.Render(c.bruteForcedTable.View()),
-		)
 
-		return c.getView(row)
+		if c.width >= largestTableSize {
+			row = lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				DefaultBoxStyles.Inactive.Render(c.table.View()),
+				DefaultBoxStyles.Active.Render(c.portsTable.View()),
+				DefaultBoxStyles.Inactive.Render(c.bruteForcedTable.View()),
+			)
+			break
+		}
+
+		row = DefaultBoxStyles.Active.Render(c.portsTable.View())
 	case BruteForcedTable:
 		c.bruteForcedTable.SetStyles(selectedStyle)
 		c.table.SetStyles(inactiveStyle)
 		c.portsTable.SetStyles(inactiveStyle)
-		row := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			DefaultBoxStyles.Inactive.Render(c.table.View()),
-			DefaultBoxStyles.Inactive.Render(c.portsTable.View()),
-			DefaultBoxStyles.Active.Render(c.bruteForcedTable.View()),
-		)
 
-		return c.getView(row)
+		if c.width >= largestTableSize {
+			row = lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				DefaultBoxStyles.Inactive.Render(c.table.View()),
+				DefaultBoxStyles.Inactive.Render(c.portsTable.View()),
+				DefaultBoxStyles.Active.Render(c.bruteForcedTable.View()),
+			)
+			break
+		}
+
+		row = DefaultBoxStyles.Active.Render(c.bruteForcedTable.View())
 	case StatsTable:
 		c.table.SetStyles(selectedStyle)
 		return DefaultBoxStyles.Active.Render(c.table.View())
 	case SearchMode:
 		searchBox := DefaultBoxStyles.Active.Render(c.searchBox.View())
 		return searchBox
-	// For undefined TargetDomainTable or SearchResultsTable
+	// For TargetDomainTable or SearchResultsTable
 	default:
 		c.table.SetStyles(selectedStyle)
 		c.portsTable.SetStyles(inactiveStyle)
 		c.bruteForcedTable.SetStyles(inactiveStyle)
-		row := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			DefaultBoxStyles.Active.Render(c.table.View()),
-			DefaultBoxStyles.Inactive.Render(c.portsTable.View()),
-			DefaultBoxStyles.Inactive.Render(c.bruteForcedTable.View()),
-		)
 
-		return c.getView(row)
+		if c.width >= largestTableSize {
+			row = lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				DefaultBoxStyles.Active.Render(c.table.View()),
+				DefaultBoxStyles.Inactive.Render(c.portsTable.View()),
+				DefaultBoxStyles.Inactive.Render(c.bruteForcedTable.View()),
+			)
+			break
+		}
+
+		row = DefaultBoxStyles.Active.Render(c.table.View())
 	}
+
+	return c.getView(row)
 }
 
 func (c *CLI) getView(row string) string {
