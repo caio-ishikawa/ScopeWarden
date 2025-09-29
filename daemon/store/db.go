@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/caio-ishikawa/scopewarden/shared/models"
@@ -18,8 +20,27 @@ type TargetTable interface {
 	GetAll() []TargetTable
 }
 
+func getDBPath() (string, error) {
+	baseDir := "/var/lib/scopewarden"
+
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		return "", fmt.Errorf("Unable to create path: %w", err)
+	}
+
+	return filepath.Join(baseDir, "scopewarden.db"), nil
+}
+
 func Init() (Database, error) {
-	db, err := sql.Open("sqlite3", "./scopewarden.db?_journal_mode=WAL&_busy_timeout=5000")
+	dbPath, err := getDBPath()
+	if err != nil {
+		return Database{}, fmt.Errorf("Failed to create DB: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return Database{}, fmt.Errorf("Failed to create DB file: %w", err)
+	}
+
+	db, err := sql.Open("sqlite3", fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000", dbPath))
 	if err != nil {
 		return Database{}, fmt.Errorf("Failed to start DB connection: %w", err)
 	}

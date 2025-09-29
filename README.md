@@ -1,9 +1,10 @@
 <div align="center">
-    <img src="assets/scopewarden.png" width=250 height=250>
+    <img src="assets/scopewarden.png" height=150>
 </div>
 
 ## 💻 Introduction
-ScopeWarden is a self-hostable and configurable automated recon tool with a interactive CLI table for going through the results. It allows for flexible automation of recon workflows without relying on any specific tool.
+ScopeWarden is a self-hostable and configurable automated recon tool with an interactive CLI. It allows for flexible automation of recon workflows without relying on any specific tool.
+
 <div align="center">
     <img src="assets/scopewarden2.png">
 </div>
@@ -15,27 +16,39 @@ ScopeWarden is a self-hostable and configurable automated recon tool with a inte
 - **Update messages:** Can be configured to send Telegram messages if a new or previously unavailable domain/port becomes available.
 
 ## 📦 Setup & Installation
-#### Pre-installation Setup
-ScopeWarden expects some environment variables to be set before installing:
+### Linux
+#### Daemon Installation
+- Clone the repository.
+- In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
+- If you want the daemon to run as a systemd service, run `sudo make install-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. Additionally, it crates the Sqlite database in `/var/lib/scopwarden.db`.
+    - **Note:** For the systemd service to work, you will need to add the yaml configuration to `/etc/scopewarden/scopewarden.yaml`, and to set up the Telegram notifications, the `SCOPEWARDEN_TELEGRAM_API_KEY` & `SCOPEWARDEN_TELEGRAM_CHAT_ID` variables must be set in `/etc/scopewarden/scopewarden.env`. (See [Telegram Notification Setup](#telegram-notification-setup) for more information.)
+- If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.bin
+
+#### CLI Installation:
+- Clone the repository
+- In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
+- Check installation with `scopewarden -h`.
+
+### MacOS 
+#### Environment Variables
+ScopeWarden expects some environment variables to be set: 
 - **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
 - **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
 - **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
+
+#### Daemon Installation
+- In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
+- Once built, start it by running `scopewarden-daemon`.
+
+#### CLI Installation
+- Clone the repository
+- In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
+- Check installation with `scopewarden -h`.
 
 #### Telegram Notifications Setup
 In order to reduce dependencies, ScopeWarden relies on your own Telegram bot and chat ID. To set this up, check the following documentation:
 - **Set up bot token:** https://core.telegram.org/bots/features#botfather
 - **To get your chat ID:** https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
-
-#### Installing Daeomn/API
-1. Clone the repository.
-2. In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
-3. If you want the daemon to run as a service in Linux, run `sudo make install-daemon`. This moves the `scopewarden-daemon.service` file to `/etc/systemd/system/` and starts the daemon as a service. The daemon can be set to start on boot by running `sudo systemctl enable scopewarden-daemon.service`. 
-4. If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
-
-#### Installing CLI
-1. Clone the repository
-2. In the project directory, run `sudo make cli`. This builds the binary into `/usr/bin`.
-3. Check installation with `scopewarden -h`.
 
 ## 🖥️ Dependencies
 - [Golang](https://go.dev/)
@@ -209,7 +222,6 @@ All navigation keys are displayed in the helper text below the table.
 Anyone is welcomed to point out issues or open PRs for ScopeWarden. Please remember to update the README in the PR when a change requires it.
 
 I would especially welcome changes towards these features:
-- **Per-scope rate-limit:** Add a way to configure ScopeWarden to rate-limit requests and brute force attepmts per-scope. Alternatively, add a override option to the tool that will apply a different command based on the scope name.
 - **Allow file output parser for tool:** Add output parser type called 'file' which parses tool output file instead of the real time output in stdout. Ideally it would set the output path to `/tmp` and delete it after processing.
 - **Search and select target on interactive CLI instead of by flags:** E.g `scopewarden` command renders a table with all targets and lets you select the target for the main table.
 - **Web interface**: Add web interface as an alternative to the CLI. I'm not personally interested in this, but I think it would suit other people's workflows a little nicer.
