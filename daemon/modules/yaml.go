@@ -76,6 +76,11 @@ type Tool struct {
 	OverrideConfig   []ToolOverride     `yaml:"overrides"`
 }
 
+type DaemonConfig struct {
+	Global GlobalConfig `yaml:"global"`
+	Tools  []Tool       `yaml:"tools"`
+}
+
 func GenerateModuleCommand(module Tool, targetURL string) (CommandExecution, error) {
 	commandStr := module.Cmd
 	for _, override := range module.OverrideConfig {
@@ -197,11 +202,6 @@ func GenerateBruteForceCmd(module Tool, target string, scopeURL string, technolo
 	output.args = args
 
 	return &output, nil
-}
-
-type DaemonConfig struct {
-	Global GlobalConfig `yaml:"global"`
-	Tools  []Tool       `yaml:"tools"`
 }
 
 func NewDaemonConfig() (DaemonConfig, error) {

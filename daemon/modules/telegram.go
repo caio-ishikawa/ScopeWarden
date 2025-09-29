@@ -51,7 +51,9 @@ func (t TelegramClient) SendMessage(notification models.Notification) error {
 		return fmt.Errorf("Failed to marshal request body: %w", err)
 	}
 
-	res, err := http.Post(fmt.Sprintf("%s/bot%s/sendMessage", baseURL, t.apiKey), "application/json", bytes.NewReader(req))
+	apiURL := fmt.Sprintf("%s/bot%s/sendMessage", baseURL, t.apiKey)
+
+	res, err := http.Post(apiURL, "application/json", bytes.NewReader(req))
 	if err != nil {
 		return fmt.Errorf("Failed to send request to telegram API: %w", err)
 	}

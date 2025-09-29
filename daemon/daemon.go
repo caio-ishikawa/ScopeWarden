@@ -108,6 +108,8 @@ func (a *Daemon) RunDaemon() {
 			continue
 		}
 
+		a.TestTelegram()
+
 		// Start of actual daemon
 		scopes, err := a.db.GetAllScopes()
 		if err != nil {
@@ -286,6 +288,8 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 	responseDetails, err := getResDetails(httpClient, baseURL)
 	foundDomain.StatusCode = responseDetails.statusCode
 	if err != nil {
+		log.Printf("Failed to get response: %s", err.Error())
+
 		// Insert domain where request was unsuccessful, so that next iterations can exit early if it already processed the domain in this scan
 		if existingDomain == nil {
 			foundDomain.UUID = uuid.NewString()
@@ -301,8 +305,6 @@ func (a *Daemon) processURLOutput(httpClient http.Client, input modules.ToolOutp
 		if err := a.db.UpdateDomainRecord(foundDomain); err != nil {
 			log.Printf("Failed to update non-working domain %s: %s", baseURL, err.Error())
 		}
-
-		log.Printf("Failed to get response: %s", err.Error())
 
 		// Return early if request was unsuccessful
 		return

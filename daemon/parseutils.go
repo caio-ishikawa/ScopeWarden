@@ -24,16 +24,29 @@ type ParsedPortData struct {
 }
 
 func parseURL(urlStr string) (string, error) {
+	if urlStr == "" {
+		return "", fmt.Errorf("Cannot parse URL from empty string")
+	}
+
 	parsed, err := url.Parse(urlStr)
 	if err != nil {
 		return "", err
 	}
 
+	// Assume TLS if no scheme in URL string
+	if parsed.Scheme == "" {
+		parsed.Scheme = "https"
+	}
+
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("Unable to parsed URL with scheme %s", parsed.Scheme)
+	}
+
 	var baseURL string
-	if parsed.Scheme == "https" || parsed.Scheme == "http" {
+	if parsed.Host != "" {
 		baseURL = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
-	} else if parsed.Scheme == "" {
-		baseURL = parsed.Path
+	} else if parsed.Path != "" {
+		baseURL = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Path)
 	}
 
 	return baseURL, nil
