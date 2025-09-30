@@ -73,7 +73,7 @@ cli:
 	sudo go build -o $(BIN_DIR)/scopewarden ./cmd
 	@echo "scopewarden CLI built at $(BIN_DIR)/scopewarden"
 
-clean:
-	sudo rm -rf $(BIN_DIR)/scopewarden-daemon
+uninstall-cli:
 	sudo rm -rf $(BIN_DIR)/scopewarden
-	@echo "Cleaned binaries"
+	@echo "scopewarden CLI deleted from $(BIN_DIR)/scopewarden"
+
