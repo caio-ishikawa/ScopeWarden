@@ -180,6 +180,11 @@ func (a *Daemon) scanScopes(scopes []models.Scope) {
 		outputChan := make(chan modules.ToolOutput, 1000)
 		go a.ConsumeRealTime(models.DomainTable, outputChan, *target, scope)
 
+		if len(a.config.Tools) == 0 {
+			log.Printf("No tools found in config")
+			return
+		}
+
 		for _, tool := range a.config.Tools {
 			log.Printf("Running tool %s", tool.ID)
 

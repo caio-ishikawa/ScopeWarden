@@ -21,7 +21,7 @@ const (
 	tableHeightFullScreen = 80
 	tableHeightOne        = 2
 
-	largestTableSize = 256
+	largestTableSize = 173
 
 	apiURL = "http://localhost:8080"
 )
