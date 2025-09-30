@@ -98,19 +98,21 @@ func (a *Daemon) RunDaemon() {
 			log.Printf("Failed to update daemon config: %s", err.Error())
 			time.Sleep(10)
 		}
+
+		if len(config.Tools) == 0 {
+			log.Println("No tools detected on config file")
+			time.Sleep(10)
+		}
+
 		a.config = config
 
-		// We should get stats from the db
-		// Do not scan unless it's been enough time since the last scan ended or if the last scan took longer than the schedule
+		// TODO: Should probably get stats from DB
 		if a.stats.LastScanEnded != nil &&
 			(time.Since(*a.stats.LastScanEnded) < time.Duration(a.config.Global.Schedule)*time.Hour ||
 				time.Since(a.stats.ScanBegin) < time.Duration(a.config.Global.Schedule)*time.Hour) {
 			continue
 		}
 
-		a.TestTelegram()
-
-		// Start of actual daemon
 		scopes, err := a.db.GetAllScopes()
 		if err != nil {
 			log.Printf("Failed to get all scopes: %s", err.Error())
@@ -124,11 +126,9 @@ func (a *Daemon) RunDaemon() {
 			continue
 		}
 
-		// Set initial stats
 		a.stats.UUID = uuid.NewString()
 		a.stats.ScanBegin = time.Now()
 		a.stats.IsRunning = true
-		// Insert first scan stats
 		if err := a.db.InsertDaemonStats(a.stats); err != nil {
 			log.Fatalf("Failed to insert initial daemon stats: %s", err.Error())
 		}
@@ -140,9 +140,7 @@ func (a *Daemon) RunDaemon() {
 			log.Printf("%s", err.Error())
 		}
 
-		// Run scope scans
 		a.scanScopes(scopes)
-		// Wait for brute force scans to end
 		a.concurrencySettings.bruteForceWg.Wait()
 
 		// Reset stats when scan ends

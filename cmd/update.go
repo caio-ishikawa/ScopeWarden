@@ -10,7 +10,7 @@ import (
 
 func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable || c.state == SearchResultsTable {
-		c.domainOffset = c.domainOffset + tableLimit
+		c.domainOffset = c.domainOffset + c.tableLimit
 		rows, err := c.GetDomainRows(nil)
 		if err != nil {
 			tea.Println("ERROR: COULD NOT UPDATE DOMAINS")
@@ -20,9 +20,9 @@ func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
 		c.table.SetRows(rows)
 	}
 	if c.state == BruteForcedTable {
-		c.bruteForcedOffset = c.bruteForcedOffset + tableLimit
+		c.bruteForcedOffset = c.bruteForcedOffset + c.tableLimit
 
-		bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
+		bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset, c.tableLimit)
 		if err != nil {
 			tea.Println("ERROR: COULD NOT GET BRUTE FORCED DOMAINS")
 			return c, tea.Quit, false
@@ -44,8 +44,8 @@ func (c *CLI) handleKeyL() (tea.Model, tea.Cmd, bool) {
 
 func (c *CLI) handleKeyH() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable || c.state == SearchResultsTable {
-		if c.domainOffset >= tableLimit {
-			c.domainOffset = c.domainOffset - tableLimit
+		if c.domainOffset >= c.tableLimit {
+			c.domainOffset = c.domainOffset - c.tableLimit
 
 			rows, err := c.GetDomainRows(nil)
 			if err != nil {
@@ -59,10 +59,10 @@ func (c *CLI) handleKeyH() (tea.Model, tea.Cmd, bool) {
 		}
 	}
 	if c.state == BruteForcedTable {
-		if c.bruteForcedOffset >= tableLimit {
-			c.bruteForcedOffset = c.bruteForcedOffset - tableLimit
+		if c.bruteForcedOffset >= c.tableLimit {
+			c.bruteForcedOffset = c.bruteForcedOffset - c.tableLimit
 
-			bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset)
+			bruteForced, err := GetBruteForcedByDomain(c.selectedDomainURL, c.bruteForcedOffset, c.tableLimit)
 			if err != nil {
 				tea.Println("ERROR: COULD NOT GET BRUTE FORCED DOMAINS")
 				return c, tea.Quit, false
@@ -85,7 +85,7 @@ func (c *CLI) handleKeyJ() (tea.Model, tea.Cmd, bool) {
 	if c.state == TargetDomainTable || c.state == SearchResultsTable {
 		c.table.MoveDown(1)
 		c.selectedDomainURL = c.table.SelectedRow()[3]
-		if c.selectedDomainIdx < tableLimit {
+		if c.selectedDomainIdx < c.tableLimit {
 			c.selectedDomainIdx += 1
 		}
 

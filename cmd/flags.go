@@ -19,6 +19,7 @@ type CLIFlags struct {
 	InsertTarget  string
 	DisableTarget string
 	EnableTarget  string
+	Dump          string
 }
 
 func ParseFlags() (CLIFlags, error) {
@@ -28,17 +29,19 @@ func ParseFlags() (CLIFlags, error) {
 	var insertTarget string
 	var disableTarget string
 	var enableTarget string
+	var dumpTarget string
 
-	flag.StringVar(&target, "t", "", "Show target stats based on target name (<target_name>)")
+	flag.StringVar(&target, "t", "", "Show target table (<target_name>)")
 	flag.BoolVar(&stats, "s", false, "Show stats")
 	flag.StringVar(&insertScope, "iS", "", "Insert scope - Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<scope_url>)")
 	flag.StringVar(&insertTarget, "iT", "", "Insert target (<target_name>)")
 	flag.StringVar(&disableTarget, "dT", "", "Disable target (<target_name>)")
 	flag.StringVar(&enableTarget, "eT", "", "Enable target (<target_name>)")
+	flag.StringVar(&dumpTarget, "d", "", "Dump all collected data from specific target (<target_name>)")
 
 	flag.Parse()
 
-	if target == "" && stats == false && insertScope == "" && insertTarget == "" && disableTarget == "" && enableTarget == "" {
+	if target == "" && stats == false && insertScope == "" && insertTarget == "" && disableTarget == "" && enableTarget == "" && dumpTarget == "" {
 		return CLIFlags{}, fmt.Errorf("Error running ScopeWarden CLI: At lest one flag must be present")
 	}
 
@@ -90,5 +93,6 @@ func ParseFlags() (CLIFlags, error) {
 		InsertScope:   scope,
 		InsertTarget:  insertTarget,
 		DisableTarget: disableTarget,
+		Dump:          dumpTarget,
 	}, nil
 }

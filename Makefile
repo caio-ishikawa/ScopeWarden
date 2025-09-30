@@ -10,7 +10,11 @@ all: daemon cli
 
 daemon:
 	sudo mkdir -p $(BIN_DIR)
+
 	sudo mkdir -p $(DATA_DIR)
+	sudo chown $(USER):$(GROUP) $(DATA_DIR)
+	sudo chmod 775 $(DATA_DIR)
+
 	sudo go build -o $(BIN_DIR)/scopewarden-daemon ./daemon
 	echo "scopewarden-daemon built at $(BIN_DIR)/scopewarden-daemon"
 
@@ -26,8 +30,6 @@ install-daemon:
 	sudo chown $(USER):$(GROUP) /etc/scopewarden/scopewarden.env
 	sudo chmod 640 /etc/scopewarden/scopewarden.env
 
-	sudo chown $(USER):$(GROUP) $(DATA_DIR)
-	sudo chmod 775 $(DATA_DIR)
 
 	sudo touch /etc/scopewarden/scopewarden.yaml
 	sudo chown $(USER):$(GROUP) /etc/scopewarden/scopewarden.yaml
@@ -68,7 +70,7 @@ uninstall-daemon:
 	@echo "scopewarden-daemon uninstalled"
 
 cli:
-	sudo @mkdir -p $(BIN_DIR)
+	sudo mkdir -p $(BIN_DIR)
 	sudo go build -o $(BIN_DIR)/scopewarden ./cmd
 	@echo "scopewarden CLI built at $(BIN_DIR)/scopewarden"
 

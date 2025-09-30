@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -52,6 +53,7 @@ func (t TelegramClient) SendMessage(notification models.Notification) error {
 	}
 
 	apiURL := fmt.Sprintf("%s/bot%s/sendMessage", baseURL, t.apiKey)
+	log.Println(apiURL)
 
 	res, err := http.Post(apiURL, "application/json", bytes.NewReader(req))
 	if err != nil {

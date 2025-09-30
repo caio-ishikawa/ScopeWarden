@@ -16,7 +16,6 @@ const (
 	white = "#D3C6AA"
 	red   = "#E67E80"
 
-	tableLimit            = 39
 	tableHeightHalfScreen = 40
 	tableHeightFullScreen = 80
 	tableHeightOne        = 2

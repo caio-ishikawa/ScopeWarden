@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"runtime"
 	"strconv"
 
@@ -88,6 +89,7 @@ type CLI struct {
 	isSearching       bool
 	height            int
 	width             int
+	tableLimit        int
 }
 
 func NewCLI() (CLI, error) {
@@ -159,6 +161,7 @@ func NewCLI() (CLI, error) {
 		bruteForcedOffset: 0,
 		selectedDomainURL: "",
 		selectedDomainIdx: 0,
+		tableLimit:        39,
 	}, nil
 }
 
@@ -284,6 +287,10 @@ func (c *CLI) RenderURLsTable() error {
 		return fmt.Errorf("Error getting domain rows: %w", err)
 	}
 
+	if len(rows) == 0 {
+		return fmt.Errorf("No domains to display for target %s", c.targetUUID)
+	}
+
 	c.table.SetColumns(URLColumns)
 	c.table.SetRows(rows)
 	c.table.SetCursor(0)
@@ -366,31 +373,29 @@ func (c *CLI) RenderSearchModal() error {
 	return nil
 }
 
-//func (c *CLI) generateColumns() {
-//	StatsColumns = []table.Column{
-//		{Title: "Total Found URLs", Width: 16},
-//		{Title: "Total New URLs", Width: 14},
-//		{Title: "Total Found Ports", Width: 17},
-//		{Title: "Total New Ports", Width: 15},
-//		{Title: "Scan duration", Width: 13},
-//		{Title: "Scan time", Width: 20},
-//		{Title: "Is Running", Width: 10},
-//	}
-//
-//	URLColumns = []table.Column{
-//		{Title: "Status", Width: 6},
-//		{Title: "Ports", Width: 5},
-//		{Title: "Brute", Width: 5},
-//		{Title: "URL", Width: 65},
-//	}
-//
-//	PortColumns = []table.Column{
-//		{Title: "Ports", Width: 10},
-//		{Title: "Protocol", Width: 15},
-//		{Title: "State", Width: 20},
-//	}
-//
-//	BruteForcedColumns = []table.Column{
-//		{Title: "Assets", Width: 25},
-//	}
-//}
+func (c *CLI) DumpTargetData(target string) error {
+	if err := c.SetTarget(target); err != nil {
+		return fmt.Errorf("Failed to dump data for %s: %w", target, err)
+	}
+
+	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy, "", -1)
+	if err != nil {
+		return fmt.Errorf("Failed to get domains rows: %w", err)
+	}
+
+	for _, domain := range res.Domains {
+		fmt.Println(domain.URL)
+		for _, asset := range domain.BruteForced {
+			if asset.Path[0] == '/' {
+				fmt.Printf("%s%s\n", domain.URL, asset.Path)
+			} else if _, err := url.Parse(asset.Path); err != nil {
+				fmt.Println(asset)
+			} else {
+				fmt.Printf("%s/%s\n", domain.URL, asset.Path)
+			}
+		}
+	}
+
+	return nil
+
+}

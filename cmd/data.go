@@ -19,7 +19,7 @@ func (c *CLI) GetDomainRows(substr *string) ([]table.Row, error) {
 		search = *substr
 	}
 
-	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy, search)
+	res, err := GetDomainsByTarget(c.targetUUID, c.domainOffset, c.sortBy, search, c.tableLimit)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get domains rows: %w", err)
 	}
@@ -85,8 +85,8 @@ func (c *CLI) GetBruteForcedRows(assets []models.BruteForced) ([]table.Row, erro
 	return rows, nil
 }
 
-func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy, substr string) (models.DomainListResponse, error) {
-	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v&sort_by=%s&url=%s", apiURL, target, tableLimit, offset, sortBy, substr)
+func GetDomainsByTarget(target string, offset int, sortBy models.DomainSortBy, substr string, limit int) (models.DomainListResponse, error) {
+	url := fmt.Sprintf("%s/domains?target_uuid=%s&limit=%v&offset=%v&sort_by=%s&url=%s", apiURL, target, limit, offset, sortBy, substr)
 	res, err := http.Get(url)
 	if err != nil {
 		return models.DomainListResponse{}, fmt.Errorf("Could not get domains for target %s: %w", target, err)
@@ -127,11 +127,11 @@ func GetPortsByDomain(domainURL string) ([]models.Port, error) {
 	return ret.Ports, nil
 }
 
-func GetBruteForcedByDomain(domainURL string, offset int) ([]models.BruteForced, error) {
+func GetBruteForcedByDomain(domainURL string, offset, limit int) ([]models.BruteForced, error) {
 	param := url.Values{}
 	param.Add("domain_url", domainURL)
 
-	url := fmt.Sprintf("%s/bruteforced?%s&limit=%v&offset=%v", apiURL, param.Encode(), tableLimit, offset)
+	url := fmt.Sprintf("%s/bruteforced?%s&limit=%v&offset=%v", apiURL, param.Encode(), limit, offset)
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("Could not get domains for domain %s: %w", domainURL, err)

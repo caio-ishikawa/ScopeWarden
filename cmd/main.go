@@ -26,6 +26,12 @@ func main() {
 		return
 	}
 
+	if flags.Dump != "" {
+		if err := cli.DumpTargetData(flags.Dump); err != nil {
+			exitWithErr(fmt.Sprintf("Error when dumping target data: %s", err.Error()))
+		}
+	}
+
 	if flags.DisableTarget != "" {
 		if err := EnableDisableTarget(flags.DisableTarget, false); err != nil {
 			exitWithErr(fmt.Sprintf("Error disabing target: %s\n", err.Error()))

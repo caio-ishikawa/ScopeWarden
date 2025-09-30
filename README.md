@@ -182,17 +182,19 @@ tools:
 ## 🎯 CLI Usage
 The CLI allows you to add targets and scopes, as well as view the recon results per target in a interactive table.
 ```
+  -d string
+        Dump all collected data from specific target (<target_name>)
   -dT string
         Disable target (<target_name>)
   -eT string
         Enable target (<target_name>)
   -iS string
-        Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<scope_url>)
+        Insert scope - Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<scope_url>)
   -iT string
         Insert target (<target_name>)
   -s    Show stats
   -t string
-        Show target stats based on target name (<target_name>)
+        Show target table (<target_name>)
 ```
 
 #### Examples 
@@ -215,6 +217,10 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
 - View scanning daemon stats:
     ```
     scopewarden -s
+    ```
+- Dump all target domains and brute forced assets:
+    ```
+    scopewarden -d NASA
     ```
 
 #### Navigating interactive table:
