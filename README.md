@@ -189,7 +189,7 @@ The CLI allows you to add targets and scopes, as well as view the recon results 
   -eT string
         Enable target (<target_name>)
   -iS string
-        Insert scope - Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<scope_url>)
+        Insert scope: Comma-separated values for scope. First value should be target name, and the following values will be interpreted as scope URLs (<target_name>,<scope_url>)
   -iT string
         Insert target (<target_name>)
   -s    Show stats
