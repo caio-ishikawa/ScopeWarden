@@ -33,8 +33,6 @@ const (
 type Module string
 
 const (
-	Gau      Module = "GAU"
-	Waymore  Module = "WAYMORE"
 	Telegram Module = "TELEGRAM"
 )
 

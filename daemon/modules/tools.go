@@ -79,7 +79,7 @@ func runCmdAsync(tool Tool, regex string, command CommandExecution, outputChan c
 			output := scanner.Text()
 			isURL := re.MatchString(output)
 			if !isURL {
-				log.Printf("[%s] Output %s did not match regex - SKIPPING", models.Gau, output)
+				log.Printf("Output %s did not match regex - SKIPPING", output)
 				continue
 			}
 
