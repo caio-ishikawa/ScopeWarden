@@ -23,17 +23,16 @@ install-daemon:
 	echo "PATH=$(USER_PATH)" > /etc/scopewarden/scopewarden.env
 	echo "SCOPEWARDEN_CONFIG=/etc/scopewarden/scopewarden.yaml" >> /etc/scopewarden/scopewarden.env
 
-	sudo chown root:$(USER) /etc/scopewarden/scopewarden.env
+	sudo chown $(USER):$(GROUP) /etc/scopewarden/scopewarden.env
 	sudo chmod 640 /etc/scopewarden/scopewarden.env
 
-	sudo chown $(USER):root $(DATA_DIR)
+	sudo chown $(USER):$(GROUP) $(DATA_DIR)
 	sudo chmod 775 $(DATA_DIR)
 
 	sudo touch /etc/scopewarden/scopewarden.yaml
-	sudo chown $(USER):root /etc/scopewarden/scopewarden.yaml
+	sudo chown $(USER):$(GROUP) /etc/scopewarden/scopewarden.yaml
 	sudo chmod 775 /etc/scopewarden/scopewarden.yaml
 
-	# sudo touch /etc/systemd/system/scopewarden-daemon.service
 	sudo sh -c 'echo "[Unit]" > /etc/systemd/system/scopewarden-daemon.service'
 	sudo sh -c 'echo "Description=ScopeWarden Daemon & API" >> /etc/systemd/system/scopewarden-daemon.service'
 	sudo sh -c 'echo "After=network.target" >> /etc/systemd/system/scopewarden-daemon.service'
