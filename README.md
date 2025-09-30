@@ -12,23 +12,28 @@ ScopeWarden is a self-hostable and configurable automated recon tool with an int
 ## ✨ Features
 - **Run any recon tool:** The yaml configuration file allows you to set any command for the scan to run, and a way to filter results such that only the relevant output gets considered.
 - **Run port scans on found assets:** Each found domain from the recon tool can be port scanned, and the configuration allows you to set specific ports to avoid collecting noise. Alternatively, it can run a complete port scan for each found domain.
-- **Conditional brute force**: Each tool can be configured to use a brute force tool (e.g. ffuf, gobuster, etc.), which can itself be configured to run based on the technologies found on the domain (e.g. php, wordpress, apache, etc.)
+- **Conditional brute force**: Each tool can be configured to use a brute force tool (e.g. ffuf, gobuster, etc.), which can itself be configured to run based on the technologies fingerprinted on the domain (e.g. php, wordpress, apache, etc.)
 - **Update messages:** Can be configured to send Telegram messages if a new or previously unavailable domain/port becomes available.
 
 ## 📦 Setup & Installation
-### Linux
-#### Environment Variables
-If ScopeWarden is **not** being ran as a systemd service, it expects some environment variables to be set: 
+### Environment Variables
+ScopeWarden expects some environment variables to be set: 
 - **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
 - **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
 - **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
 
+### Go Install
+Both the scanning daemon and the CLI are availabe to be install with `go install`, but by doing so, you will not be able to run the daemon and API as a systemd servicewith the installation script. To do so, check the [Linux installation guide](#linux) for more information.
+- To install the scanning daemon & API: `go install github.com/caio-ishikawa/ScopeWarden/daemon@latest`
+- To install the CLI: `go install github.com/caio-ishikawa/ScopeWarden/cmd@latest`
+
+### Linux
 #### Daemon & API Installation
 - Clone the repository.
 - In the project directory, run `make daemon`. This builds the binary into `/usr/bin`.
 - Run the daemon & API with `scopewarden-daemon`.
 - If you want the daemon and API to run as a systemd service, run `make install-daemon`. This creates the `scopewarden-daemon.service` file in `/etc/systemd/system/` and starts the daemon as a service. Additionally, it crates the SQLite database in `/var/lib/scopwarden.db`. The daemon and API run as the user that ran the `make install-daemon` command, in order for the daemon to have access to the user's `PATH` and to be able to run the same commands as the user.
-    - **Note:** The systemd service uses `/etc/scopewarden/scopewarden.yaml` as the configuration file path by default, and to set up the Telegram notifications, the `SCOPEWARDEN_TELEGRAM_API_KEY` & `SCOPEWARDEN_TELEGRAM_CHAT_ID` variables must be set in `/etc/scopewarden/scopewarden.env`. (See [Telegram Notification Setup](#telegram-notification-setup) for more information.)
+    - **Note:** The systemd service uses `/etc/scopewarden/scopewarden.yaml` as the configuration file path by default, and to set up the Telegram notifications, the `SCOPEWARDEN_TELEGRAM_API_KEY` & `SCOPEWARDEN_TELEGRAM_CHAT_ID` variables must be set in `/etc/scopewarden/scopewarden.env`. Once the Telegram variables are set, restart the daemon with  `sudo systemctl restart scopewarden-daemon`. See [Telegram Notification Setup](#telegram-notifications-setup) for more information.
 - If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
 
 #### CLI Installation:
@@ -87,7 +92,7 @@ The yaml file can contain the folliwng:
 #### Global
 - **schedule**: Interval in hours for running scans (e.g., `12` runs every 12 hours). If the previous scan took longer than the set schedule , it will run again after it is completed.
 - **notify**: `true` or `false`. Enables Telegram notifications.
-- **Intensity:** `aggressive` or `conservative`. Aggressive will use a maximum of 30 concurrent processes to parse domains and 15 concurrent processes to conduct the brute force. Conservative will use 10 and 5 respectively. This field defaults to `conservative`.
+- **intensity:** `aggressive` or `conservative`. Aggressive will use a maximum of 20 concurrent processes to parse domains and 10 concurrent processes to conduct the brute force. Conservative will use 10 and 5 respectively. This field defaults to `conservative`.
 
 #### Tools
 Multiple tools are allowed to be configured under the `tools` section, each with the following configurations:
