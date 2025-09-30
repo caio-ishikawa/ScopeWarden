@@ -17,12 +17,19 @@ ScopeWarden is a self-hostable and configurable automated recon tool with an int
 
 ## 📦 Setup & Installation
 ### Linux
-#### Daemon Installation
+#### Environment Variables
+If ScopeWarden is **not** being ran as a systemd service, it expects some environment variables to be set: 
+- **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
+- **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
+- **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
+
+#### Daemon & API Installation
 - Clone the repository.
 - In the project directory, run `make daemon`. This builds the binary into `/usr/bin`.
-- If you want the daemon to run as a systemd service, run `make install-daemon`. This creates the `scopewarden-daemon.service` file and in `/etc/systemd/system/` and starts the daemon as a service. Additionally, it crates the Sqlite database in `/var/lib/scopwarden.db`. The daemon and API run as the user that ran the `make install-daemon` command, in order for the daemon to have access to the user's `PATH` for it to be able to run the same commands as the user.
+- Run the daemon & API with `scopewarden-daemon`.
+- If you want the daemon and API to run as a systemd service, run `make install-daemon`. This creates the `scopewarden-daemon.service` file in `/etc/systemd/system/` and starts the daemon as a service. Additionally, it crates the SQLite database in `/var/lib/scopwarden.db`. The daemon and API run as the user that ran the `make install-daemon` command, in order for the daemon to have access to the user's `PATH` and to be able to run the same commands as the user.
     - **Note:** The systemd service uses `/etc/scopewarden/scopewarden.yaml` as the configuration file path by default, and to set up the Telegram notifications, the `SCOPEWARDEN_TELEGRAM_API_KEY` & `SCOPEWARDEN_TELEGRAM_CHAT_ID` variables must be set in `/etc/scopewarden/scopewarden.env`. (See [Telegram Notification Setup](#telegram-notification-setup) for more information.)
-- If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.bin
+- If the daemon and API were started as a systemd service, check the logs to make sure it is running with: `sudo journalctl -u scopewarden-daemon`.
 
 #### CLI Installation:
 - Clone the repository
@@ -36,14 +43,9 @@ ScopeWarden is a self-hostable and configurable automated recon tool with an int
 - Run `make uninstall-cli`.
 
 ### MacOS 
-#### Environment Variables
-ScopeWarden expects some environment variables to be set: 
-- **SCOPEWARDEN_CONFIG:** Should be an absolute path to the configuration yaml file.
-- **SCOPEWARDEN_TELEGRAM_API_KEY:** Telegram bot API key. Only necessary if notification is set to true in the configuration file.
-- **SCOPEWARDEN_TELEGRAM_CHAT_ID:** Telegram chat ID. Only necessary if notification is set to true in the configuration file.
-
 #### Daemon Installation
 - In the project directory, run `sudo make daemon`. This builds the binary into `/usr/bin`.
+- Set the aforementioned environment variables.
 - Once built, start it by running `scopewarden-daemon`.
 
 #### CLI Installation
